@@ -44,7 +44,7 @@ def test_winning_condition(environment: TicTacToeEnv) -> None:
             np.array([[1, 0, -1], [0, -1, 1], [-1, 1, 0]], dtype="int8"),
             -1,
             True,
-        )
+        ),
     ]
 
     for setup in setups:

@@ -129,4 +129,7 @@ class TicTacToeEnv(gym.Env):
                 return True, player
 
         # potential draw
-        return np.count_nonzero(self.board) == self.board.shape[0] * self.board.shape[1], 0
+        return (
+            np.count_nonzero(self.board) == self.board.shape[0] * self.board.shape[1],
+            0,
+        )
