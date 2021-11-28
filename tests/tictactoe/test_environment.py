@@ -9,8 +9,11 @@ from tictactoe.environment import TicTacToeEnv
 # work-around for missing type-annotion
 if TYPE_CHECKING:
     from pytest import FixtureRequest as __FixtureRequest
+
     class FixtureRequest(__FixtureRequest):
         param: Any
+
+
 else:
     from pytest import FixtureRequest
 
@@ -34,6 +37,14 @@ def test_winning_condition_small(environment: TicTacToeEnv) -> None:
             1,
             True,
         ),
+        (
+            np.array([[1, 0], [-1, 0]], dtype="int8"),
+            True,
+            1,
+            np.array([[1, 1], [-1, 0]], dtype="int8"),
+            1,
+            True,
+        ),
     ]
 
     for setup in setups:
@@ -43,6 +54,7 @@ def test_winning_condition_small(environment: TicTacToeEnv) -> None:
         np.testing.assert_array_equal(got_observation[0], want_result)
         assert got_done == want_done
         assert got_reward == want_reward
+
 
 @pytest.mark.parametrize("environment", (3,), indirect=True)
 def test_winning_condition(environment: TicTacToeEnv) -> None:
