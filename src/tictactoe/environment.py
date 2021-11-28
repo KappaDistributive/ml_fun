@@ -26,8 +26,12 @@ class TicTacToeEnv(gym.Env):
         )
 
     def set_state(self, board: np.ndarray, player_ones_turn: bool) -> Observation:
-        assert self.board.shape == board.shape, f"Want: {self.board.shape} Got: {board.shape}"
-        assert self.board.dtype == board.dtype, f"Want: {self.board.dtype} Got: {board.dtype}"
+        assert (
+            self.board.shape == board.shape
+        ), f"Want: {self.board.shape} Got: {board.shape}"
+        assert (
+            self.board.dtype == board.dtype
+        ), f"Want: {self.board.dtype} Got: {board.dtype}"
         self.board = deepcopy(board)
         self.player_ones_turn = player_ones_turn
 

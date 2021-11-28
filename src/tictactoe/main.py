@@ -7,7 +7,7 @@ from typing import Tuple
 
 from tqdm import tqdm
 
-from tictactoe.environment import TicTacToeEnv
+from src.tictactoe.environment import TicTacToeEnv
 from mcts.mcts import Action, MCTS, Node, State
 
 

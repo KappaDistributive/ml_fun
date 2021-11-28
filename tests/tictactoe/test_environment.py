@@ -3,7 +3,7 @@ from typing import Any, TYPE_CHECKING
 import numpy as np
 import pytest
 
-from tictactoe.environment import TicTacToeEnv
+from src.tictactoe.environment import TicTacToeEnv
 
 
 # work-around for missing type-annotion
