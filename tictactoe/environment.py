@@ -108,10 +108,11 @@ class TicTacToeEnv(gym.Env):
         for player in [1, -1]:
             is_line: bool = True
             for offset in range(self.board_size):
-                x = self.board_size - offset - 1
+                x = self.board.shape[0] - offset - 1
                 y = offset
                 if self.board[y, x] != player:
                     is_line = False
+                    break
             if is_line:
                 return True, player
 
@@ -120,11 +121,12 @@ class TicTacToeEnv(gym.Env):
             is_line: bool = True
             for offset in range(self.board_size):
                 x = offset
-                y = self.board_size - offset - 1
+                y = offset
                 if self.board[y, x] != player:
                     is_line = False
+                    break
             if is_line:
                 return True, player
 
         # potential draw
-        return np.count_nonzero(self.board) == self.board_size * self.board_size, 0
+        return np.count_nonzero(self.board) == self.board.shape[0] * self.board.shape[1], 0
