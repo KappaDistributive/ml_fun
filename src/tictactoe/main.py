@@ -78,15 +78,28 @@ if __name__ == "__main__":
             mcts = TicTacToeMCTS(deepcopy(env.board))
             for _ in tqdm(range(1_000)):
                 mcts.rollout(mcts.root)
-            max_value = max(child.value() for child in mcts.root.children.values())
+
+            available_actions = env.available_actions()
+            max_value = max(
+                child.value()
+                for action, child in mcts.root.children.items()
+                if action in available_actions
+            )
             print(
-                {action: child.value() for action, child in mcts.root.children.items()}
+                {
+                    action: (
+                        child.value() if action in available_actions else float("-inf")
+                    )
+                    for action, child in mcts.root.children.items()
+                }
             )
             action, _ = random.choice(
                 [
                     (a, c)
                     for a, c in mcts.root.children.items()
-                    if c.visit_count > 0 and c.value() == max_value
+                    if c.visit_count > 0
+                    and c.value() == max_value
+                    and a in available_actions
                 ]
             )
 
