@@ -5,8 +5,10 @@ import tensorflow as tf
 
 
 class AbstractMuZeroModel(ABC):
-    def __init__(self, num_actions: int):
+    def __init__(self, num_actions: int, observation_size: int, action_size: int):
         self.num_actions = num_actions  # aka `K`
+        self.observation_size = observation_size
+        self.action_size = action_size
 
     @abstractmethod
     def representation_function(self, observation: tf.Tensor) -> tf.Tensor:
@@ -63,15 +65,13 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         hidden_layer_sizes: List[int],
         learning_rate: float = 1e-3,
     ):
-        super().__init__(num_actions)
-        self.observation_size = observation_size
-        self.action_size = action_size
+        super().__init__(num_actions, observation_size, action_size)
         self.state_size = state_size
         self.hidden_layer_sizes = hidden_layer_sizes
         self.learning_rate = learning_rate
 
         # representation function h_{\theta}: (o^{0}) |---> (s^{0})
-        initial_observation = tf.keras.Input(observation_size)
+        initial_observation = tf.keras.Input(self.observation_size)
         x = initial_observation
         for layer_size in self.hidden_layer_sizes:
             x = tf.keras.layers.Dense(layer_size, activation="relu")(x)
@@ -106,14 +106,14 @@ class DenseMuZeroModel(AbstractMuZeroModel):
 
         # mu function \mu_{\theta}: (o^{0}, a^{1}, ..., a^{K}) |---> (p^{0}, ..., p^{K}, v^{0}, ..., v^{K}, r^{1}, ..., r^{K})
         initial_observation = tf.keras.Input(self.observation_size, name="o_0")
-        previous_initial_state = self.representation_function(initial_observation)
+        previous_internal_state = self.representation_function(initial_observation)
 
         actions = []  # length K
         policies = []  # length K+1
         values = []  # length K+1
         rewards = []  # length K
 
-        policy, value = self.prediction_function(previous_initial_state)
+        policy, value = self.prediction_function(previous_internal_state)
         policies.append(policy)
         values.append(value)
 
@@ -121,14 +121,14 @@ class DenseMuZeroModel(AbstractMuZeroModel):
             action = tf.keras.Input(self.action_size, name=f"a_{k+1}")
             actions.append(action)
             immediate_reward, internal_state = self.dynamics_model(
-                [previous_initial_state, action]
+                [previous_internal_state, action]
             )
             policy, value = self.prediction_function(internal_state)
             policies.append(policy)
             values.append(value)
             rewards.append(immediate_reward)
 
-            previous_initial_state = initial_hidden_state
+            previous_internal_state = internal_state
 
         self.mu_model = tf.keras.Model(
             [initial_observation] + actions, policies + values + rewards, name="mu"
