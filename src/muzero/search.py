@@ -43,7 +43,14 @@ action_space_cache: Dict[
 ] = {}
 
 
-def naive_search(model: AbstractMuZeroModel, initial_observation: tf.Tensor):
+def naive_search(
+    model: AbstractMuZeroModel, initial_observation: tf.Tensor
+) -> np.ndarray:
+    """
+    :param model: MuZero model.
+    :param initial_observation: Initial observation.
+    :return: Policy, i.e. a probability distribution over all actions.
+    """
     num_actions = model.num_actions
     action_size = model.action_size
 
