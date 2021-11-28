@@ -3,7 +3,6 @@ from __future__ import annotations
 import dataclasses
 import math
 import random
-
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Any, Dict, List, Tuple

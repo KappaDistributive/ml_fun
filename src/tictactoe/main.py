@@ -7,8 +7,8 @@ from typing import Tuple
 
 from tqdm import tqdm
 
+from src.mcts.mcts import MCTS, Action, Node, State
 from src.tictactoe.environment import TicTacToeEnv
-from mcts.mcts import Action, MCTS, Node, State
 
 
 class TicTacToeMCTS(MCTS):

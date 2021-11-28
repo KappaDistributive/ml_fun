@@ -11,4 +11,8 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-
+-   repo: https://github.com/pycqa/isort
+    rev: 5.10.1
+    hooks:
+      - id: isort
+        name: isort (python)

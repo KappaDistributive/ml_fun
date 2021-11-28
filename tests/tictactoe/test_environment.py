@@ -1,10 +1,9 @@
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
 
 from src.tictactoe.environment import TicTacToeEnv
-
 
 # work-around for missing type-annotion
 if TYPE_CHECKING:
