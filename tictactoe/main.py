@@ -73,7 +73,7 @@ if __name__ == "__main__":
     env.render()
     while not done:
         if player == 1:
-            action = int(input())
+            action = int(input("Enter your move:"))
         else:
             mcts = TicTacToeMCTS(deepcopy(env.board))
             for _ in tqdm(range(1_000)):
