@@ -6,13 +6,13 @@ import tensorflow as tf
 
 class AbstractMuZeroModel(ABC):
     def __init__(self, search_depth: int):
-        self.search_depth = search_depth
+        self.search_depth = search_depth  # aka `K`
 
     @abstractmethod
-    def representation_function(self, observations: tf.Tensor) -> tf.Tensor:
+    def representation_function(self, observation: tf.Tensor) -> tf.Tensor:
         """
         The representation function h_{\theta}
-        :param observations:
+        :param observation: o^{0}
         :return:
         """
         raise NotImplemented
@@ -40,6 +40,18 @@ class AbstractMuZeroModel(ABC):
         """
         raise NotImplemented
 
+    @abstractmethod
+    def mu_function(
+        self, observation: tf.Tensor, actions: List[tf.Tensor]
+    ) -> List[tf.Tensor]:
+        """
+        The mu function
+        :param observation: o^{0}
+        :param actions: [a^{1}, a^{2}, ..., a^{K}]
+        :return:
+        """
+        raise NotImplemented
+
 
 class DenseMuZeroModel(AbstractMuZeroModel):
     def __init__(
@@ -49,18 +61,20 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         action_size: int,
         state_size: int,
         hidden_layer_sizes: List[int],
+        learning_rate: float = 1e-3,
     ):
         super().__init__(search_depth)
         self.observation_size = observation_size
         self.action_size = action_size
         self.state_size = state_size
         self.hidden_layer_sizes = hidden_layer_sizes
+        self.learning_rate = learning_rate
 
         # representation function h_{\theta}
         x = initial_observation = tf.keras.layers.Input(observation_size)
         for layer_size in self.hidden_layer_sizes:
             x = tf.keras.layers.Dense(layer_size, activation="relu")(x)
-        initial_hidden_state = tf.keras.layers.Dense(self.state_size, name="s_0")(x)
+        initial_hidden_state = tf.keras.layers.Dense(self.state_size, name="s^{0}")(x)
         self.representation_model = tf.keras.Model(
             initial_observation, initial_hidden_state, name="h"
         )
@@ -71,8 +85,8 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         x = tf.keras.layers.Concatenate()([previous_internal_state, action])
         for layer_size in self.hidden_layer_sizes:
             x = tf.keras.layers.Dense(layer_size, activation="relu")(x)
-        immediate_reward = tf.keras.layers.Dense(1, name="r_k")(x)
-        internal_state = tf.keras.layers.Dense(self.state_size, name="s_k")(x)
+        immediate_reward = tf.keras.layers.Dense(1, name="r^{k}")(x)
+        internal_state = tf.keras.layers.Dense(self.state_size, name="s^{k}")(x)
         self.dynamics_model = tf.keras.Model(
             [previous_internal_state, action],
             [immediate_reward, internal_state],
@@ -83,14 +97,44 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         x = internal_state = tf.keras.layers.Input(self.state_size)
         for layer_size in self.hidden_layer_sizes:
             x = tf.keras.layers.Dense(layer_size, activation="relu")(x)
-        policy = tf.keras.layers.Dense(self.action_size, name="p_k")(x)
-        value = tf.keras.layers.Dense(1, name="v_k")(x)
+        policy = tf.keras.layers.Dense(self.action_size, name="p^{k}")(x)
+        value = tf.keras.layers.Dense(1, name="v^{k}")(x)
         self.prediction_model = tf.keras.Model(
             internal_state, [policy, value], name="f"
         )
 
-    def representation_function(self, observations: tf.Tensor) -> tf.Tensor:
-        return self.representation_model(observations)
+        # mu function \mu_{\theta}
+        initial_observation = tf.keras.layers.Input(self.observation_size, name="o^{0}")
+        previous_initial_state = self.representation_function(initial_observation)
+
+        actions = []
+        losses = []
+        output = []
+
+        policy, value = self.prediction_function(previous_initial_state)
+        output += [policy, value]
+        losses += [tf.nn.softmax_cross_entropy_with_logits, "mse"]
+
+        for k in range(self.search_depth):
+            action = tf.keras.layer.Input(self.action_size, name=f"a_{k+1}")
+            actions.append(action)
+            immediate_reward, internal_state = self.dynamics_model(
+                previous_initial_state, action
+            )
+            policy, value = self.prediction_function(internal_state)
+            output += [policy, value, immediate_reward]
+            losses += [tf.nn.softmax_cross_entropy_with_logits, "mse", "mse"]
+
+            previous_initial_state = initial_hidden_state
+
+        self.mu_model = tf.keras.model(
+            [initial_observation] + actions, output, name="mu"
+        )
+
+        self.mu_model.compile(tf.keras.optimizers.Adam(self.learning_rate), losses)
+
+    def representation_function(self, observation: tf.Tensor) -> tf.Tensor:
+        return self.representation_model(observation)
 
     def dynamics_function(
         self, previous_internal_state: tf.Tensor, action: tf.Tensor
@@ -101,3 +145,8 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         self, internal_state: tf.Tensor
     ) -> Tuple[tf.Tensor, tf.Tensor]:
         return self.prediction_model(internal_state)
+
+    def mu_function(
+        self, observation: tf.Tensor, actions: List[tf.Tensor]
+    ) -> List[tf.Tensor]:
+        return self.mu_model([observation] + actions)
