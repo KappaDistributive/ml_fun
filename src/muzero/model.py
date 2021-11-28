@@ -70,7 +70,7 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         self.hidden_layer_sizes = hidden_layer_sizes
         self.learning_rate = learning_rate
 
-        # representation function h_{\theta}
+        # representation function h_{\theta}: (o^{0}) |---> (s^{0})
         x = initial_observation = tf.keras.layers.Input(observation_size)
         for layer_size in self.hidden_layer_sizes:
             x = tf.keras.layers.Dense(layer_size, activation="relu")(x)
@@ -79,7 +79,7 @@ class DenseMuZeroModel(AbstractMuZeroModel):
             initial_observation, initial_hidden_state, name="h"
         )
 
-        # dynamics function g_{\theta}
+        # dynamics function g_{\theta}: (s^{k-1}, a^{k}) |---> (r^{k}, s^{k})
         previous_internal_state = tf.keras.layers.Input(self.state_size)
         action = tf.keras.layers.Input(self.action_size)
         x = tf.keras.layers.Concatenate()([previous_internal_state, action])
@@ -93,7 +93,7 @@ class DenseMuZeroModel(AbstractMuZeroModel):
             name="g",
         )
 
-        # prediction function f_{\theta}
+        # prediction function f_{\theta}: (s^{k})  |---> (p^{k}, v^{k})
         x = internal_state = tf.keras.layers.Input(self.state_size)
         for layer_size in self.hidden_layer_sizes:
             x = tf.keras.layers.Dense(layer_size, activation="relu")(x)
@@ -103,17 +103,18 @@ class DenseMuZeroModel(AbstractMuZeroModel):
             internal_state, [policy, value], name="f"
         )
 
-        # mu function \mu_{\theta}
+        # mu function \mu_{\theta}: (o^{0}, a^{1}, ..., a^{K}) |---> (p^{0}, ..., p^{K}, v^{0}, ..., v^{K}, r^{1}, ..., r^{K})
         initial_observation = tf.keras.layers.Input(self.observation_size, name="o^{0}")
         previous_initial_state = self.representation_function(initial_observation)
 
-        actions = []
-        losses = []
-        output = []
+        actions = []  # length K
+        policies = []  # length K+1
+        values = []  # length K+1
+        rewards = []  # length K
 
         policy, value = self.prediction_function(previous_initial_state)
-        output += [policy, value]
-        losses += [tf.nn.softmax_cross_entropy_with_logits, "mse"]
+        policies.append(policy)
+        values.append(values)
 
         for k in range(self.search_depth):
             action = tf.keras.layer.Input(self.action_size, name=f"a_{k+1}")
@@ -122,13 +123,19 @@ class DenseMuZeroModel(AbstractMuZeroModel):
                 previous_initial_state, action
             )
             policy, value = self.prediction_function(internal_state)
-            output += [policy, value, immediate_reward]
-            losses += [tf.nn.softmax_cross_entropy_with_logits, "mse", "mse"]
+            policies.append(policy)
+            values.append(values)
+            rewards.append(rewards)
 
             previous_initial_state = initial_hidden_state
 
         self.mu_model = tf.keras.model(
-            [initial_observation] + actions, output, name="mu"
+            [initial_observation] + actions, policies + values + rewards, name="mu"
+        )
+        losses: List[str] = (
+            (["nn.softmax_cross_entropy_with_logits"] * len(policies))
+            + (["mse"] * len(values))
+            + (["mse"] * len(rewards))
         )
 
         self.mu_model.compile(tf.keras.optimizers.Adam(self.learning_rate), losses)
