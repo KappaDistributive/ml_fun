@@ -21,6 +21,7 @@ class AbstractMuZeroModel(ABC):
         self.lookahead_range = lookahead_range  # aka `K`
         self.observation_size = observation_size
         self.action_size = action_size
+        self.state_size = state_size
 
     @abstractmethod
     def representation_function(self, observation: tf.Tensor) -> tf.Tensor:
