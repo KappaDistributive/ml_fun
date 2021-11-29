@@ -40,7 +40,7 @@ def prepare_batch(
             [to_one_hot(action, action_size) for action in actions[:lookahead_range]]
         )
 
-        # mu function \mu_{\theta}: (o^{0}, a^{1}, ..., a^{K}) |---> (p^{0}, ..., p^{K}, v^{0}, ..., v^{K}, r^{1}, ..., r^{K})
+        # mu function \mu_{theta}: (o^{0}, a^{1}, ..., a^{K}) |---> (p^{0}, ..., p^{K}, v^{0}, ..., v^{K}, r^{1}, ..., r^{K})
         values = [np.array([target[0]]) for target in targets]
         rewards = [np.array([target[1]]) for target in targets[1:]]
         policies = [target[2] for target in targets]
