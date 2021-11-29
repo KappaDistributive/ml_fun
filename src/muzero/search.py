@@ -5,12 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from src.muzero.model import AbstractMuZeroModel
-from src.muzero.utils import to_one_hot
-
-
-def softmax(logits: np.ndarray) -> np.ndarray:
-    energies = np.exp(logits - np.max(logits))
-    return energies / energies.sum()
+from src.muzero.utils import softmax, to_one_hot
 
 
 def get_actions(
@@ -64,7 +59,9 @@ def naive_search(
         axis=0,
     )  # shape (num_actions, observation_size)
 
-    output = model.mu_function(initial_observations, all_encoded_action_sequences)
+    output = model.mu_function(
+        observation=initial_observations, actions=all_encoded_action_sequences
+    )
     final_values = tf.squeeze(output[2 * (num_actions + 1) - 1]).numpy()
     action_value_pairs = [
         (all_action_sequences[index], final_values[index])

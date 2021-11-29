@@ -54,6 +54,12 @@ class AbstractMuZeroModel(ABC):
         """
         raise NotImplemented
 
+    @abstractmethod
+    def train_on_batch(
+        self, input: tf.Tensor, actions: List[tf.Tensor], target: List[tf.Tensor]
+    ) -> float:
+        raise NotImplemented
+
 
 class DenseMuZeroModel(AbstractMuZeroModel):
     def __init__(
@@ -69,6 +75,7 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         self.state_size = state_size
         self.hidden_layer_sizes = hidden_layer_sizes
         self.learning_rate = learning_rate
+        self.losses: List[float] = []
 
         # representation function h_{\theta}: (o^{0}) |---> (s^{0})
         initial_observation = tf.keras.Input(self.observation_size)
@@ -131,12 +138,18 @@ class DenseMuZeroModel(AbstractMuZeroModel):
             previous_internal_state = internal_state
 
         self.mu_model = tf.keras.Model(
-            [initial_observation] + actions, policies + values + rewards, name="mu"
+            inputs=[initial_observation] + actions,
+            outputs=policies + values + rewards,
+            name="mu",
         )
+
         losses: List[str] = (
-            (["nn.softmax_cross_entropy_with_logits"] * len(policies))
-            + (["mse"] * len(values))
-            + (["mse"] * len(rewards))
+            (
+                [tf.keras.losses.CategoricalCrossentropy(from_logits=True)]
+                * len(policies)
+            )
+            + ([tf.keras.losses.MeanSquaredError()] * len(values))
+            + ([tf.keras.losses.MeanSquaredError()] * len(rewards))
         )
 
         self.mu_model.compile(tf.keras.optimizers.Adam(self.learning_rate), losses)
@@ -158,3 +171,10 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         self, observation: tf.Tensor, actions: List[tf.Tensor]
     ) -> List[tf.Tensor]:
         return self.mu_model([observation] + actions)
+
+    def train_on_batch(
+        self, observation: tf.Tensor, actions: List[tf.Tensor], targets: List[tf.Tensor]
+    ) -> float:
+        loss = self.mu_model.train_on_batch(x=[observation] + actions, y=targets)
+        self.losses.append(loss)
+        return loss
