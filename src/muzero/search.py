@@ -9,13 +9,13 @@ from src.muzero.utils import softmax, to_one_hot
 
 
 def get_actions(
-    num_actions: int, action_size: int
+    lookahead_range: int, action_size: int
 ) -> Tuple[List[Tuple[int, ...]], List[tf.Tensor]]:
     all_action_sequences = list(
-        itertools.product(list(range(action_size)), repeat=num_actions)
+        itertools.product(list(range(action_size)), repeat=lookahead_range)
     )
     action_sequence_tensors: List[tf.Tensor] = []
-    for action_step in range(num_actions):
+    for action_step in range(lookahead_range):
         action_sequence_tensors.append(
             tf.stack(
                 [
@@ -42,27 +42,27 @@ def naive_search(
     :param initial_observation: Initial observation.
     :return: Policy, i.e. a probability distribution over all actions.
     """
-    num_actions = model.num_actions
+    lookahead_range = model.lookahead_range
     action_size = model.action_size
 
-    if (num_actions, action_size) not in action_space_cache:
-        action_space_cache[(num_actions, action_size)] = get_actions(
-            num_actions, action_size
+    if (lookahead_range, action_size) not in action_space_cache:
+        action_space_cache[(lookahead_range, action_size)] = get_actions(
+            lookahead_range, action_size
         )
 
     all_action_sequences, all_encoded_action_sequences = action_space_cache[
-        (num_actions, action_size)
+        (lookahead_range, action_size)
     ]
     initial_observations = tf.repeat(
         tf.reshape(initial_observation, shape=(1, -1)),
         len(all_action_sequences),
         axis=0,
-    )  # shape (num_actions, observation_size)
+    )  # shape (lookahead_range, observation_size)
 
     output = model.mu_function(
         observation=initial_observations, actions=all_encoded_action_sequences
     )
-    final_values = tf.squeeze(output[2 * (num_actions + 1) - 1]).numpy()
+    final_values = tf.squeeze(output[2 * (lookahead_range + 1) - 1]).numpy()
     action_value_pairs = [
         (all_action_sequences[index], final_values[index])
         for index in range(final_values.shape[0])
@@ -72,7 +72,7 @@ def naive_search(
     for action_sequence, value in action_value_pairs:
         action_values[action_sequence[0]] += value
 
-    action_values = np.array(action_values).astype(np.float64) / num_actions
+    action_values = np.array(action_values).astype(np.float64) / lookahead_range
     policy = softmax(action_values)
 
     return policy

@@ -5,8 +5,8 @@ import tensorflow as tf
 
 
 class AbstractMuZeroModel(ABC):
-    def __init__(self, num_actions: int, observation_size: int, action_size: int):
-        self.num_actions = num_actions  # aka `K`
+    def __init__(self, lookahead_range: int, observation_size: int, action_size: int):
+        self.lookahead_range = lookahead_range  # aka `K`
         self.observation_size = observation_size
         self.action_size = action_size
 
@@ -64,14 +64,14 @@ class AbstractMuZeroModel(ABC):
 class DenseMuZeroModel(AbstractMuZeroModel):
     def __init__(
         self,
-        num_actions: int,
+        lookahead_range: int,
         observation_size: int,
         action_size: int,
         state_size: int,
         hidden_layer_sizes: List[int],
         learning_rate: float = 1e-3,
     ):
-        super().__init__(num_actions, observation_size, action_size)
+        super().__init__(lookahead_range, observation_size, action_size)
         self.state_size = state_size
         self.hidden_layer_sizes = hidden_layer_sizes
         self.learning_rate = learning_rate
@@ -124,7 +124,7 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         policies.append(policy)
         values.append(value)
 
-        for k in range(self.num_actions):
+        for k in range(self.lookahead_range):
             action = tf.keras.Input(self.action_size, name=f"a_{k+1}")
             actions.append(action)
             immediate_reward, internal_state = self.dynamics_model(

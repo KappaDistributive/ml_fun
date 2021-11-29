@@ -79,10 +79,10 @@ class Game:
 
 
 class ReplayBuffer:
-    def __init__(self, buffer_size: int, batch_size: int, num_actions: int):
+    def __init__(self, buffer_size: int, batch_size: int, lookahead_range: int):
         self.buffer_size = buffer_size
         self.batch_size = batch_size
-        self.num_actions = num_actions
+        self.lookahead_range = lookahead_range
         self.buffer = deque(maxlen=self.buffer_size)
 
     def save_game(self, game):
@@ -97,8 +97,8 @@ class ReplayBuffer:
         return [
             (
                 game.get_observation(offset),
-                game.get_history(offset, self.num_actions),
-                game.make_target(offset, self.num_actions + 1),
+                game.get_history(offset, self.lookahead_range),
+                game.make_target(offset, self.lookahead_range + 1),
             )
             for game, offset in games
         ]
