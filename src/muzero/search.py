@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from src.muzero.model import AbstractMuZeroModel
+from src.muzero.utils import to_one_hot
 
 
 def softmax(logits: np.ndarray) -> np.ndarray:
@@ -15,11 +16,6 @@ def softmax(logits: np.ndarray) -> np.ndarray:
 def get_actions(
     num_actions: int, action_size: int
 ) -> Tuple[List[Tuple[int, ...]], List[tf.Tensor]]:
-    def to_one_hot(action: int, num_actions: int) -> np.ndarray:
-        result = np.zeros([num_actions])
-        result[action] = 1.0
-        return result
-
     all_action_sequences = list(
         itertools.product(list(range(action_size)), repeat=num_actions)
     )
