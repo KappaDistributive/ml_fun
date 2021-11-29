@@ -177,6 +177,7 @@ def play_game(
         if random.random() < epsilon:
             policy = np.array([1 / model.action_size] * model.action_size)
         else:
+            # TODO: replace naive search with MCTS
             policy = naive_search(model, game.observation)
         game.act_with_policy(policy)
     return game

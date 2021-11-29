@@ -85,6 +85,7 @@ def via_muzero() -> None:
 
     for sample_step in range(100):
         game = play_game(environment, model)
+        # TODO: add proper logging.
         print(
             f"Adding a game with total reward {sum(game.rewards):5.1f} to replay buffer."
         )
