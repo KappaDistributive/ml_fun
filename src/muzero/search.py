@@ -11,6 +11,12 @@ from src.muzero.utils import softmax, to_one_hot
 def get_actions(
     lookahead_range: int, action_size: int
 ) -> Tuple[List[Tuple[int, ...]], List[tf.Tensor]]:
+    """
+    Create all possible action combinations.
+    :param lookahead_range: Number of actions (i.e. steps) in each entry.
+    :param action_size: Number of possible actions per step.
+    :return: All possible combinations of `lookahead_range`-sized action-sequences.
+    """
     all_action_sequences = list(
         itertools.product(list(range(action_size)), repeat=lookahead_range)
     )
@@ -38,6 +44,7 @@ def naive_search(
     model: AbstractMuZeroModel, initial_observation: tf.Tensor
 ) -> np.ndarray:
     """
+    A naive search algorithm.
     :param model: MuZero model.
     :param initial_observation: Initial observation.
     :return: Policy, i.e. a probability distribution over all actions.

@@ -13,13 +13,19 @@ def prepare_batch(
     batch: List[Tuple[np.ndarray, List[int], List[Tuple[float, float, np.ndarray]]]],
     action_size: int,
     lookahead_range: int,
-):
+) -> Tuple[tf.Tensor, List[tf.Tensor], List[tf.Tensor]]:
+    """
+    :param batch: Each entry is of the form (observation, actions, targets).
+    :param action_size: Number of possible actions.
+    :param lookahead_range: Lookahead range.
+    :return: (observations, actions, labels)
+    """
     observations_batch, actions_batch, labels_batch = [], [], []
 
-    for entry in batch:
-        assert isinstance(entry, tuple)
-        assert len(entry) == 3
-        initial_observation, actions, targets = entry
+    for sample in batch:
+        assert isinstance(sample, tuple)
+        assert len(sample) == 3
+        initial_observation, actions, targets = sample
 
         while len(actions) < lookahead_range:
             actions.append(
@@ -28,10 +34,6 @@ def prepare_batch(
 
         while len(targets) < lookahead_range + 1:
             targets.append((0.0, 0.0, np.array([1.0 / action_size] * action_size)))
-
-        # print("Initial observation", initial_observation)
-        # print("Actions", actions)
-        # print("Targets", targets)
 
         observations_batch.append(initial_observation)
         actions_batch.append(
@@ -42,10 +44,6 @@ def prepare_batch(
         values = [np.array([target[0]]) for target in targets]
         rewards = [np.array([target[1]]) for target in targets[1:]]
         policies = [target[2] for target in targets]
-
-        # print(len(values), len(rewards), len(policies))
-        # print(len(policies + values + rewards))
-
         labels_batch.append(policies + values + rewards)
 
     return (
@@ -62,10 +60,11 @@ def prepare_batch(
 
 
 def via_muzero() -> None:
+    """
+    Train a MuZero-agent on CartPole.
+    :return: None
+    """
     environment = gym.make("CartPole-v0")
-    observation = environment.reset()
-    # print(environment.action_space)
-    # print(observation, )
     lookahead_range = 5
     observation_size = environment.observation_space.shape[0]
     action_size = environment.action_space.n
