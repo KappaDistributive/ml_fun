@@ -7,7 +7,7 @@ import gym
 import numpy as np
 
 from src.muzero.model import AbstractMuZeroModel
-from src.muzero.search import naive_search
+from src.muzero.search import mcts, naive_search
 
 
 class Game:
@@ -163,13 +163,17 @@ class ReplayBuffer:
 
 
 def play_game(
-    environment: gym.Env, model: AbstractMuZeroModel, epsilon: float = 0.05
+    environment: gym.Env,
+    model: AbstractMuZeroModel,
+    epsilon: float = 0.05,
+    num_simulations: int = 10,
 ) -> Game:
     """
     Play a game in `environment` to completion where actions are sampled from the policy created by `model`.
     :param environment: A gym environment.
     :param model: A MuZero agent.
     :param epsilon: With probabilty `epsilon`, perform a random action rather than sampling from the model policy.
+    :param num_simulations: The number of simulations to be performed each step.
     :return: A completed game, played according to the policy created by `model`.
     """
     game = Game(environment)
@@ -177,7 +181,13 @@ def play_game(
         if random.random() < epsilon:
             policy = np.array([1 / model.action_size] * model.action_size)
         else:
-            # TODO: replace naive search with MCTS
-            policy = naive_search(model, game.observation)
+            naive_policy, _ = naive_search(model, game.observation)
+            # TODO: MCTS is broken. Do I need priors?
+            policy, _ = mcts(
+                model, game.observation, num_simulations, ignore_to_play=True
+            )
+            # print(f"Naive policy: {naive_policy}")
+            # print(f"MCTS policy: {policy}")
+            # print()
         game.act_with_policy(policy)
     return game

@@ -1,5 +1,7 @@
 import itertools
-from typing import Dict, List, Tuple
+import math
+import random
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -42,7 +44,7 @@ action_space_cache: Dict[
 
 def naive_search(
     model: AbstractMuZeroModel, initial_observation: tf.Tensor
-) -> np.ndarray:
+) -> Tuple[np.ndarray, None]:
     """
     A naive search algorithm.
     :param model: MuZero model.
@@ -82,4 +84,119 @@ def naive_search(
     action_values = np.array(action_values).astype(np.float64) / lookahead_range
     policy = softmax(action_values)
 
-    return policy
+    return policy, None
+
+
+class Node:
+    def __init__(self, internal_state: Optional[tf.Tensor] = None, to_play: int = -1):
+        self.internal_state = internal_state
+        self.to_play = to_play
+        self.num_visits = 0
+        self.total_value = 0.0
+        self.children: Dict[int, Node] = {}  # maps actions to children
+        self.reward = 0.0
+
+    def is_expanded(self) -> bool:
+        return bool(self.children)
+
+    def value(self) -> float:
+        if self.num_visits == 0:
+            return 0.0
+        return self.total_value / self.num_visits
+
+
+def ucb_score(
+    parent: Node, child: Node, exploration_parameter: float = math.sqrt(2.0)
+) -> float:
+    if child.num_visits == 0:
+        return float("inf")
+
+    assert (
+        parent.num_visits > 0
+    ), "Encountered a parent that has never been visited even though its child has been visited."
+
+    return child.value() + exploration_parameter * math.sqrt(
+        math.log(parent.num_visits) / child.num_visits
+    )
+
+
+def select_child(node: Node, exploration_parameter: float = 1.0) -> Tuple[int, Node]:
+    candidates = [
+        (action, child, ucb_score(node, child, exploration_parameter))
+        for action, child in node.children.items()
+    ]
+    max_score = max([candidate[2] for candidate in candidates])
+
+    action, child, _ = random.choice(
+        [candidate for candidate in candidates if candidate[2] == max_score]
+    )
+
+    return action, child
+
+
+def mcts(
+    model: AbstractMuZeroModel,
+    initial_observation: tf.Tensor,
+    num_simulations: int,
+    discount_factor: float = 1.0,
+    ignore_to_play: bool = False,
+) -> Tuple[np.ndarray, Node]:
+    root = Node(model.representation_function(tf.reshape(initial_observation, (1, -1))))
+    policy, _ = model.prediction_function(tf.reshape(root.internal_state, (1, -1)))
+    policy = tf.squeeze(policy).numpy()
+
+    action_size = policy.shape[0]
+
+    for action in range(action_size):
+        root.children[action] = Node(policy[action], to_play=-root.to_play)
+
+    for simulation_step in range(num_simulations):
+        actions = []
+        node = root
+        search_path = [node]
+        # print(f"Simulation step: {simulation_step}")
+        # print(root.num_visits)
+        # print(f"Children visits: {[child.num_visits for child in root.children.values()]}")
+        # print(f"Children UCB scores: {[ucb_score(root, child) for child in root.children.values()]}")
+        # print(f"Children values: {[child.value() for child in root.children.values()]}")
+
+        # traverse the tree down to a non-expanded node
+        while node.is_expanded():
+            action, node = select_child(node)
+            actions.append(action)
+            search_path.append(node)
+
+        # update the non-expanded node
+        parent = search_path[-2]
+        node.reward, node.internal_state = model.dynamics_function(
+            tf.reshape(parent.internal_state, (1, -1)),
+            tf.reshape(
+                tf.convert_to_tensor(to_one_hot(actions[-1], action_size)), (1, -1)
+            ),
+        )
+        node.reward = float(node.reward.numpy())
+        policy, value = model.prediction_function(node.internal_state)
+        policy = tf.squeeze(policy).numpy()
+        value = float(tf.squeeze(value).numpy())
+
+        for action in range(action_size):
+            node.children[action] = Node(policy[action], to_play=-node.to_play)
+
+        # backpropagation
+        for node in reversed(search_path):
+            node.total_value += (
+                value if (ignore_to_play or root.to_play == node.to_play) else -value
+            )
+            node.num_visits += 1
+            value = node.reward + discount_factor * value
+
+    logits = []
+    for action, child in root.children.items():
+        logits.append(child.num_visits)
+
+    # print(f"Logits: {logits}")
+
+    # policy = softmax(np.array([l / 10. for l in  logits]).astype(np.float64))  # TODO: remove temperature
+    policy = softmax(np.array(logits).astype(np.float64))
+
+    return policy, root

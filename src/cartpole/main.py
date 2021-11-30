@@ -70,6 +70,7 @@ def via_muzero() -> None:
     action_size = environment.action_space.n
     state_size = 32
     batch_size = 16
+    num_simulations = 5
     model = DenseMuZeroModel(
         lookahead_range=lookahead_range,
         observation_size=observation_size,
@@ -83,12 +84,19 @@ def via_muzero() -> None:
 
     print(model.mu_model.summary())
 
-    for sample_step in range(100):
-        game = play_game(environment, model)
+    rewards: List[float] = []
+
+    for sample_step in range(1_000):
+        game = play_game(
+            environment, model, epsilon=0.00, num_simulations=num_simulations
+        )
+        rewards.append(sum(game.rewards))
         # TODO: add proper logging.
         print(
-            f"Adding a game with total reward {sum(game.rewards):5.1f} to replay buffer."
+            f"Adding a game with total reward {sum(game.rewards):6.2f} to replay buffer."
         )
+        print(f"Average reward: {sum(rewards) / len(rewards):6.2f}")
+        print()
         replay_buffer.save_game(game)
         for train_step in range(20):
             batch = replay_buffer.sample_batch()
