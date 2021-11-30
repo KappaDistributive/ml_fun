@@ -197,14 +197,17 @@ def mcts(
 
         # update the non-expanded node
         parent = search_path[-2]
-        node.reward, node.internal_state = model.dynamics_function(
+        reward, internal_state = model.dynamics_function(
             tf.reshape(parent.internal_state, (1, -1)),
             tf.reshape(
                 tf.convert_to_tensor(to_one_hot(actions[-1], action_size)), (1, -1)
             ),
         )
-        node.reward = float(node.reward.numpy())
-        policy, value = model.prediction_function(node.internal_state)
+        node.reward = float(reward.numpy())
+        node.internal_state = tf.squeeze(internal_state)
+        policy, value = model.prediction_function(
+            tf.reshape(node.internal_state, (1, -1))
+        )
         policy = tf.squeeze(policy).numpy()
         value = float(tf.squeeze(value).numpy())
 
