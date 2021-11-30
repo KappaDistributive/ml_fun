@@ -64,6 +64,10 @@ def via_muzero() -> None:
     Train a MuZero-agent on CartPole.
     :return: None
     """
+    # TODO: Add evaluation.
+    # TODO: Add proper logging.
+    # TODO: Save / Restore model.
+    # TODO: Create TensorBoard.
     environment = gym.make("CartPole-v0")
     lookahead_range = 5
     observation_size = environment.observation_space.shape[0]
@@ -91,7 +95,6 @@ def via_muzero() -> None:
             environment, model, epsilon=0.00, num_simulations=num_simulations
         )
         rewards.append(sum(game.rewards))
-        # TODO: add proper logging.
         print(
             f"Adding a game with total reward {sum(game.rewards):6.2f} to replay buffer."
         )
