@@ -181,13 +181,10 @@ def play_game(
         if random.random() < epsilon:
             policy = np.array([1 / model.action_size] * model.action_size)
         else:
-            naive_policy, _ = naive_search(model, game.observation)
-            # TODO: MCTS is broken. Do I need priors?
+            # policy, _ = naive_search(model, game.observation)
             policy, _ = mcts(
                 model, game.observation, num_simulations, ignore_to_play=True
             )
-            # print(f"Naive policy: {naive_policy}")
-            # print(f"MCTS policy: {policy}")
-            # print()
+
         game.act_with_policy(policy)
     return game

@@ -89,6 +89,10 @@ def naive_search(
 
 class Node:
     def __init__(self, internal_state: Optional[tf.Tensor] = None, to_play: int = -1):
+        """
+        :param internal_state: MuZero's current internal state of a game.
+        :param to_play: The player who is to act on `internal_state`. Should be either 1 or -1.
+        """
         self.internal_state = internal_state
         self.to_play = to_play
         self.num_visits = 0
@@ -97,9 +101,15 @@ class Node:
         self.reward = 0.0
 
     def is_expanded(self) -> bool:
+        """
+        :return: True if this node has aldready been expanded.
+        """
         return bool(self.children)
 
     def value(self) -> float:
+        """
+        :return: The current value of this node.
+        """
         if self.num_visits == 0:
             return 0.0
         return self.total_value / self.num_visits
@@ -108,6 +118,13 @@ class Node:
 def ucb_score(
     parent: Node, child: Node, exploration_parameter: float = math.sqrt(2.0)
 ) -> float:
+    """
+    UCB score. See https://en.wikipedia.org/wiki/Monte_Carlo_tree_search#Exploration_and_exploitation
+    :param parent: Parent node.
+    :param child: Child node.
+    :param exploration_parameter: The exploration parameter. A higher value encourages more exploration.
+    :return: UCB score of `child`.
+    """
     if child.num_visits == 0:
         return float("inf")
 
@@ -121,6 +138,12 @@ def ucb_score(
 
 
 def select_child(node: Node, exploration_parameter: float = 1.0) -> Tuple[int, Node]:
+    """
+    Select the best child according to their UCB scores.
+    :param node: The parent node.
+    :param exploration_parameter: The exploration parameter. A higher value encourages more exploration.
+    :return: [action_leading_to_best_child, best_child].
+    """
     candidates = [
         (action, child, ucb_score(node, child, exploration_parameter))
         for action, child in node.children.items()
@@ -140,7 +163,18 @@ def mcts(
     num_simulations: int,
     discount_factor: float = 1.0,
     ignore_to_play: bool = False,
+    softmax_temperature: float = 1.0,
 ) -> Tuple[np.ndarray, Node]:
+    """
+    Policy-estimation of a MuZero-model via Monte Carlo Tree Search.
+    :param model: MuZero-model.
+    :param initial_observation: Initial observation.
+    :param num_simulations: The number of simulation steps to be performed.
+    :param discount_factor: The discount factor applied to future reward.
+    :param ignore_to_play: If true, don't distinguish between player 1/-1 when considering reward.
+    :param softmax_temperature: Softmax temperature.
+    :return: [policy, root].
+    """
     root = Node(model.representation_function(tf.reshape(initial_observation, (1, -1))))
     policy, _ = model.prediction_function(tf.reshape(root.internal_state, (1, -1)))
     policy = tf.squeeze(policy).numpy()
@@ -154,11 +188,6 @@ def mcts(
         actions = []
         node = root
         search_path = [node]
-        # print(f"Simulation step: {simulation_step}")
-        # print(root.num_visits)
-        # print(f"Children visits: {[child.num_visits for child in root.children.values()]}")
-        # print(f"Children UCB scores: {[ucb_score(root, child) for child in root.children.values()]}")
-        # print(f"Children values: {[child.value() for child in root.children.values()]}")
 
         # traverse the tree down to a non-expanded node
         while node.is_expanded():
@@ -194,9 +223,6 @@ def mcts(
     for action, child in root.children.items():
         logits.append(child.num_visits)
 
-    # print(f"Logits: {logits}")
-
-    # policy = softmax(np.array([l / 10. for l in  logits]).astype(np.float64))  # TODO: remove temperature
-    policy = softmax(np.array(logits).astype(np.float64))
+    policy = softmax(np.array(logits).astype(np.float64) / softmax_temperature)
 
     return policy, root
