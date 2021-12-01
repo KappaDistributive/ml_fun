@@ -63,9 +63,7 @@ def naive_search(
         (lookahead_range, action_size)
     ]
     initial_observations = tf.repeat(
-        tf.reshape(initial_observation, shape=(1, -1)),
-        len(all_action_sequences),
-        axis=0,
+        tf.expand_dims(initial_observation, axis=0), len(all_action_sequences), axis=0,
     )  # shape (lookahead_range, observation_size)
 
     output = model.mu_function(
@@ -175,8 +173,13 @@ def mcts(
     :param softmax_temperature: Softmax temperature.
     :return: [policy, root].
     """
-    root = Node(model.representation_function(tf.reshape(initial_observation, (1, -1))))
-    policy, _ = model.prediction_function(tf.reshape(root.internal_state, (1, -1)))
+    root = Node(
+        tf.squeeze(
+            model.representation_function(tf.expand_dims(initial_observation, axis=0)),
+            axis=0,
+        )
+    )
+    policy, _ = model.prediction_function(tf.expand_dims(root.internal_state, axis=0))
     policy = tf.squeeze(policy).numpy()
 
     action_size = policy.shape[0]
@@ -198,15 +201,15 @@ def mcts(
         # update the non-expanded node
         parent = search_path[-2]
         reward, internal_state = model.dynamics_function(
-            tf.reshape(parent.internal_state, (1, -1)),
-            tf.reshape(
-                tf.convert_to_tensor(to_one_hot(actions[-1], action_size)), (1, -1)
+            tf.expand_dims(parent.internal_state, axis=0),
+            tf.expand_dims(
+                tf.convert_to_tensor(to_one_hot(actions[-1], action_size)), axis=0
             ),
         )
         node.reward = float(reward.numpy())
-        node.internal_state = tf.squeeze(internal_state)
+        node.internal_state = tf.squeeze(internal_state, axis=0)
         policy, value = model.prediction_function(
-            tf.reshape(node.internal_state, (1, -1))
+            tf.expand_dims(node.internal_state, axis=0)
         )
         policy = tf.squeeze(policy).numpy()
         value = float(tf.squeeze(value).numpy())

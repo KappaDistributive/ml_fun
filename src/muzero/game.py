@@ -34,13 +34,19 @@ class Game:
         """
         return self.done
 
-    def get_observation(self, offset: int) -> Any:
+    def get_observation(self, offset: int, copy: bool = False) -> Any:
         """
         Return the observation at step `offset`.
         :param offset: The step to be considered.
+        :param copy: Whether to return a copy.
         :return: The observation at step `offset`.
         """
-        return deepcopy(self.observations[offset])
+        observation = self.observation if offset == -1 else self.observations[offset]
+
+        if copy:
+            return deepcopy(observation)
+        else:
+            return observation
 
     def get_actions(self, offset: int = 0, max_length: int = -1) -> List[int]:
         """
@@ -165,6 +171,7 @@ class ReplayBuffer:
 def play_game(
     environment: gym.Env,
     model: AbstractMuZeroModel,
+    ignore_to_play: bool,
     epsilon: float = 0.05,
     num_simulations: int = 10,
 ) -> Game:
@@ -172,18 +179,26 @@ def play_game(
     Play a game in `environment` to completion where actions are sampled from the policy created by `model`.
     :param environment: A gym environment.
     :param model: A MuZero agent.
+    :param ignore_to_play: Whether to ignore `to_play`.
     :param epsilon: With probabilty `epsilon`, perform a random action rather than sampling from the model policy.
     :param num_simulations: The number of simulations to be performed each step.
     :return: A completed game, played according to the policy created by `model`.
     """
     game = Game(environment)
+    action_size = 1
+    for dimension in model.action_shape:
+        action_size *= dimension
+
     while not game.is_terminal():
         if random.random() < epsilon:
-            policy = np.array([1 / model.action_size] * model.action_size)
+            policy = np.array([1 / action_size] * action_size)
         else:
             # policy, _ = naive_search(model, game.observation)
             policy, _ = mcts(
-                model, game.observation, num_simulations, ignore_to_play=True
+                model,
+                game.get_observation(-1),
+                num_simulations,
+                ignore_to_play=ignore_to_play,
             )
 
         game.act_with_policy(policy)

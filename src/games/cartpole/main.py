@@ -92,7 +92,11 @@ def via_muzero() -> None:
 
     for sample_step in range(1_000):
         game = play_game(
-            environment, model, epsilon=0.00, num_simulations=num_simulations
+            environment,
+            model,
+            ignore_to_play=True,
+            epsilon=0.00,
+            num_simulations=num_simulations,
         )
         rewards.append(sum(game.rewards))
         print(

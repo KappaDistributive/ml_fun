@@ -111,6 +111,7 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         # representation function h_{theta}: (o^{0}) |---> (s^{0})
         initial_observation = tf.keras.Input(shape=self.observation_shape)
         x = initial_observation
+        x = tf.keras.layers.Flatten()(x)
         for layer_size in self.hidden_layer_sizes:
             x = tf.keras.layers.Dense(layer_size, activation="relu")(x)
         initial_hidden_state = tf.keras.layers.Dense(self.state_size, name="s_0")(x)
@@ -121,6 +122,7 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         # dynamics function g_{theta}: (s^{k-1}, a^{k}) |---> (r^{k}, s^{k})
         previous_internal_state = tf.keras.Input(shape=(self.state_size,))
         action = tf.keras.Input(shape=self.action_shape)
+        action = tf.keras.layers.Flatten()(action)
         x = tf.keras.layers.Concatenate()([previous_internal_state, action])
         for layer_size in self.hidden_layer_sizes:
             x = tf.keras.layers.Dense(units=layer_size, activation="relu")(x)
@@ -157,6 +159,7 @@ class DenseMuZeroModel(AbstractMuZeroModel):
 
         for k in range(self.lookahead_range):
             action = tf.keras.Input(shape=self.action_shape, name=f"a_{k+1}")
+            action = tf.keras.layers.Flatten()(action)
             actions.append(action)
             immediate_reward, internal_state = self.dynamics_model(
                 [previous_internal_state, action]
