@@ -77,8 +77,8 @@ def via_muzero() -> None:
     num_simulations = 5
     model = DenseMuZeroModel(
         lookahead_range=lookahead_range,
-        observation_size=observation_size,
-        action_size=action_size,
+        observation_shape=(observation_size,),
+        action_shape=(action_size,),
         state_size=state_size,
         hidden_layer_sizes=[32, 32],
     )

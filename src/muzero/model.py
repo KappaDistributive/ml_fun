@@ -8,19 +8,19 @@ class AbstractMuZeroModel(ABC):
     def __init__(
         self,
         lookahead_range: int,
-        observation_size: int,
-        action_size: int,
+        observation_shape: Tuple[int, ...],
+        action_shape: Tuple[int, ...],
         state_size: int,
     ):
         """
         :param lookahead_range: Lookahead range, i.e. the number of actions performed in each sequence.
-        :param observation_size: The size of the observation space -- it is assumed to be one-dimensional for now.
-        :param action_size: The total number of possible actions in each step.
+        :param observation_shape: The shape of the observation space.
+        :param action_shape: The shape of the action space. In the simplest (1 dimensional) case, this is the number of possible actions.
         :param state_size: The size of the internal (hidden) state.
         """
         self.lookahead_range = lookahead_range  # aka `K`
-        self.observation_size = observation_size
-        self.action_size = action_size
+        self.observation_shape = observation_shape
+        self.action_shape = action_shape
         self.state_size = state_size
 
     @abstractmethod
@@ -85,28 +85,31 @@ class DenseMuZeroModel(AbstractMuZeroModel):
     def __init__(
         self,
         lookahead_range: int,
-        observation_size: int,
-        action_size: int,
+        observation_shape: Tuple[int, ...],
+        action_shape: Tuple[int, ...],
         state_size: int,
         hidden_layer_sizes: List[int],
         learning_rate: float = 1e-3,
     ):
         """
         :param lookahead_range: Lookahead range, i.e. the number of actions performed in each sequence.
-        :param observation_size: The size of the observation space -- it is assumed to be one-dimensional for now.
-        :param action_size: The total number of possible actions in each step.
+        :param observation_shape: The shape of the observation space.
+        :param action_shape: The shape of the action space. In the simplest (1 dimensional) case, this is the number of possible actions.
         :param state_size: The size of the internal (hidden) state.
         :param hidden_layer_sizes: Layer sizes of hidden layers in internal dense feed-forward networks.
         :param learning_rate: Learning rate.
         """
         # TODO: Accept an optimizer instead of a learning rate.
-        super().__init__(lookahead_range, observation_size, action_size, state_size)
+        super().__init__(lookahead_range, observation_shape, action_shape, state_size)
+        assert (
+            len(self.action_shape) == 1
+        ), "Dense layers only support 1-dimensional action shapes."
         self.hidden_layer_sizes = hidden_layer_sizes
         self.learning_rate = learning_rate
         self.losses: List[float] = []
 
         # representation function h_{theta}: (o^{0}) |---> (s^{0})
-        initial_observation = tf.keras.Input(self.observation_size)
+        initial_observation = tf.keras.Input(shape=self.observation_shape)
         x = initial_observation
         for layer_size in self.hidden_layer_sizes:
             x = tf.keras.layers.Dense(layer_size, activation="relu")(x)
@@ -116,13 +119,13 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         )
 
         # dynamics function g_{theta}: (s^{k-1}, a^{k}) |---> (r^{k}, s^{k})
-        previous_internal_state = tf.keras.Input(self.state_size)
-        action = tf.keras.layers.Input(self.action_size)
+        previous_internal_state = tf.keras.Input(shape=(self.state_size,))
+        action = tf.keras.Input(shape=self.action_shape)
         x = tf.keras.layers.Concatenate()([previous_internal_state, action])
         for layer_size in self.hidden_layer_sizes:
-            x = tf.keras.layers.Dense(layer_size, activation="relu")(x)
-        immediate_reward = tf.keras.layers.Dense(1, name="r_k")(x)
-        internal_state = tf.keras.layers.Dense(self.state_size, name="s_k")(x)
+            x = tf.keras.layers.Dense(units=layer_size, activation="relu")(x)
+        immediate_reward = tf.keras.layers.Dense(units=1, name="r_k")(x)
+        internal_state = tf.keras.layers.Dense(units=self.state_size, name="s_k")(x)
         self.dynamics_model = tf.keras.Model(
             [previous_internal_state, action],
             [immediate_reward, internal_state],
@@ -130,17 +133,17 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         )
 
         # prediction function f_{theta}: (s^{k})  |---> (p^{k}, v^{k})
-        x = internal_state = tf.keras.Input(self.state_size)
+        x = internal_state = tf.keras.Input(shape=(self.state_size,))
         for layer_size in self.hidden_layer_sizes:
-            x = tf.keras.layers.Dense(layer_size, activation="relu")(x)
-        policy = tf.keras.layers.Dense(self.action_size, name="p_k")(x)
-        value = tf.keras.layers.Dense(1, name="v_k")(x)
+            x = tf.keras.layers.Dense(units=layer_size, activation="relu")(x)
+        policy = tf.keras.layers.Dense(units=self.action_shape[0], name="p_k")(x)
+        value = tf.keras.layers.Dense(units=1, name="v_k")(x)
         self.prediction_model = tf.keras.Model(
             internal_state, [policy, value], name="f"
         )
 
         # mu function \mu_{theta}: (o^{0}, a^{1}, ..., a^{K}) |---> (p^{0}, ..., p^{K}, v^{0}, ..., v^{K}, r^{1}, ..., r^{K})
-        initial_observation = tf.keras.Input(self.observation_size, name="o_0")
+        initial_observation = tf.keras.Input(shape=self.observation_shape, name="o_0")
         previous_internal_state = self.representation_function(initial_observation)
 
         actions = []  # length K
@@ -153,7 +156,7 @@ class DenseMuZeroModel(AbstractMuZeroModel):
         values.append(value)
 
         for k in range(self.lookahead_range):
-            action = tf.keras.Input(self.action_size, name=f"a_{k+1}")
+            action = tf.keras.Input(shape=self.action_shape, name=f"a_{k+1}")
             actions.append(action)
             immediate_reward, internal_state = self.dynamics_model(
                 [previous_internal_state, action]
