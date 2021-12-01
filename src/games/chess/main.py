@@ -1,4 +1,4 @@
-from src.chess.environment import ChessEnv
+from src.games.chess.environment import ChessEnv
 
 if __name__ == "__main__":
     environment = ChessEnv()

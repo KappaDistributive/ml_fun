@@ -1,10 +1,12 @@
 from typing import Tuple
 
+import chess
 import gym
 
-import chess
-
 Observation = str
+
+# Ideas for board representation: https://github.com/crypt3lx2k/Zerofish/blob/e2923479c26ec92fe34046f0ec51f90f838c8d13/adapter.py#L103
+# See chess.Move for move representation: https://python-chess.readthedocs.io/en/latest/_modules/chess.html#Move
 
 
 class ChessEnv(gym.Env):
