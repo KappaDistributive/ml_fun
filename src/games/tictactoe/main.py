@@ -65,31 +65,27 @@ if __name__ == "__main__":
     env = TicTacToeEnv(show_number=True)
     env.reset()
 
-    player = -1
+    player = 2 * random.randint(0, 1) - 1
 
     done = False
     reward = 0
 
     env.render()
     while not done:
-        if player == 1:
+        if player == -1:
             action = int(input("Enter your move:"))
         else:
             mcts = TicTacToeMCTS(deepcopy(env.board))
             for _ in tqdm(range(1_000)):
                 mcts.rollout(mcts.root)
 
-            available_actions = env.available_actions()
+            # available_actions = env.available_actions()
             max_value = max(
-                child.value()
-                for action, child in mcts.root.children.items()
-                if action in available_actions
+                child.value() for action, child in mcts.root.children.items()
             )
             print(
                 {
-                    action: (
-                        child.value() if action in available_actions else float("-inf")
-                    )
+                    action: (child.value())
                     for action, child in mcts.root.children.items()
                 }
             )
@@ -97,9 +93,7 @@ if __name__ == "__main__":
                 [
                     (a, c)
                     for a, c in mcts.root.children.items()
-                    if c.visit_count > 0
-                    and c.value() == max_value
-                    and a in available_actions
+                    if c.visit_count > 0 and c.value() == max_value
                 ]
             )
 
