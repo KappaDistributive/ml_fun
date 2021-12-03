@@ -62,6 +62,7 @@ class TicTacToeMCTS(MCTS):
 
 
 if __name__ == "__main__":
+    # TODO: reimplement this via a dummy MuZero agent.
     env = TicTacToeEnv(show_number=True)
     env.reset()
 
