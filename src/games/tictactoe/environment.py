@@ -41,7 +41,7 @@ class TicTacToeEnv(gym.Env):
         return deepcopy(self.board), self.player_ones_turn
 
     def render(self, mode: str = "human") -> None:
-        print(f"Next to act: {self.marks[1 if self.player_ones_turn else -1]}")
+        # print(f"Next to act: {self.marks[1 if self.player_ones_turn else -1]}")
         for y in range(self.board_size):
             for x in range(self.board_size):
                 state = self.board[y, x]

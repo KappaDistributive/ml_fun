@@ -12,8 +12,8 @@ from src.mcts.mcts import MCTS, Action, Node, State
 
 
 class TicTacToeMCTS(MCTS):
-    def __init__(self, initial_state: State):
-        super().__init__(initial_state=initial_state, initial_player=-1)
+    def __init__(self, initial_state: State, initial_player: int):
+        super().__init__(initial_state=initial_state, initial_player=initial_player)
 
     def _random_child(self, node: Node) -> Tuple[Action, Node]:
         action = random.choice(range(9))
@@ -71,12 +71,15 @@ if __name__ == "__main__":
     done = False
     reward = 0
 
+    print(f"\nAgent is {'O' if player == 1 else 'X'}")
     env.render()
     while not done:
+        print(f"Player to move: {'X' if env.player_ones_turn else 'O'}")
         if player == 1:
             action = int(input("Enter your move:"))
+            # action = random.choice(env.available_actions())
         else:
-            mcts = TicTacToeMCTS(deepcopy(env.board))
+            mcts = TicTacToeMCTS(deepcopy(env.board), initial_player=player)
             for _ in tqdm(range(1_000)):
                 mcts.rollout(mcts.root)
 
