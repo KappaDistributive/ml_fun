@@ -35,8 +35,8 @@ class MCTS(ABC):
         exploration_parameter: float = math.sqrt(2.0),
     ):
         """
-    :param exploration_parameter: Exploration parameter used in the calculation of `ucb_score`.
-    """
+        :param exploration_parameter: Exploration parameter used in the calculation of `ucb_score`.
+        """
         self.initial_state = deepcopy(initial_state)
         self.root = Node(to_play=initial_player, state=self.initial_state)
         self.exploration_parameter = exploration_parameter
@@ -55,10 +55,10 @@ class MCTS(ABC):
 
     def select(self, node: Node) -> Tuple[Action, Node]:
         """
-    Selects the best child (and the action leading to it) of a given node according as measures by ucb scores.
-    :param node: Parent node.
-    :return: (action, best_child)
-    """
+        Selects the best child (and the action leading to it) of a given node according as measures by ucb scores.
+        :param node: Parent node.
+        :return: (action, best_child)
+        """
         candidates = [
             (self.ucb_score(node, child), action, child)
             for action, child in node.children.items()

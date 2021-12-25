@@ -52,7 +52,10 @@ def naive_search(
     :return: Policy, i.e. a probability distribution over all actions.
     """
     lookahead_range = model.lookahead_range
-    action_size = model.action_size
+    assert (
+        len(model.action_shape) == 1
+    ), f"Lacking support for action_shape : {model.action_shape}"
+    action_size = model.action_shape[0]
 
     if (lookahead_range, action_size) not in action_space_cache:
         action_space_cache[(lookahead_range, action_size)] = get_actions(

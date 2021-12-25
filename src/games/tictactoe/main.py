@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     env.render()
     while not done:
-        if player == -1:
+        if player == 1:
             action = int(input("Enter your move:"))
         else:
             mcts = TicTacToeMCTS(deepcopy(env.board))
@@ -103,4 +103,9 @@ if __name__ == "__main__":
         env.render()
         player *= -1
 
-    print(reward)
+    if reward == 0:
+        print("Draw")
+    elif reward == 1:
+        print("X wins")
+    else:
+        print("O wins")
