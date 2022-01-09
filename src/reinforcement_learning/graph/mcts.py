@@ -14,7 +14,7 @@ class MCTSNode(AbstractNode):
         super().__init__()
         self.observation = observation
         self.reward = reward
-        self.is_terminal = is_terminal
+        self._is_terminal = is_terminal
         self.to_play = to_play
         self.num_visits = 0
         self.sum_of_values = 0.0
@@ -31,4 +31,7 @@ class MCTSNode(AbstractNode):
         return len(self.children) > 0
 
     def is_terminal(self) -> bool:
-        return self.is_terminal
+        return self._is_terminal
+
+    def is_leaf(self) -> bool:
+        return self.is_terminal() or (not self.is_expanded())
