@@ -4,9 +4,9 @@ import gym
 import numpy as np
 import tensorflow as tf
 
-from src.muzero.game import ReplayBuffer, play_game
-from src.muzero.model import DenseMuZeroModel
-from src.muzero.utils import to_one_hot
+from ml_fun.muzero.game import ReplayBuffer, play_game
+from ml_fun.muzero.model import DenseMuZeroModel
+from ml_fun.muzero.utils import to_one_hot
 
 
 def prepare_batch(

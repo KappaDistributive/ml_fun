@@ -1,4 +1,4 @@
-from src.games.chess.environment import ChessEnv
+from ml_fun.games.chess.environment import ChessEnv
 
 if __name__ == "__main__":
     environment = ChessEnv()

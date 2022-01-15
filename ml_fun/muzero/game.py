@@ -6,8 +6,8 @@ from typing import Any, List, Tuple
 import gym
 import numpy as np
 
-from src.muzero.model import AbstractMuZeroModel
-from src.muzero.search import mcts, naive_search
+from ml_fun.muzero.model import AbstractMuZeroModel
+from ml_fun.muzero.search import mcts, naive_search
 
 
 class Game:

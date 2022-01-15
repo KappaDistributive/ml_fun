@@ -6,8 +6,8 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import tensorflow as tf
 
-from src.muzero.model import AbstractMuZeroModel
-from src.muzero.utils import softmax, to_one_hot
+from ml_fun.muzero.model import AbstractMuZeroModel
+from ml_fun.muzero.utils import softmax, to_one_hot
 
 
 def get_actions(
