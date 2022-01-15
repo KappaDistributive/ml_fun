@@ -63,6 +63,7 @@ class TicTacToeMCTS(MCTS):
 
 if __name__ == "__main__":
     # TODO: reimplement this via a dummy MuZero agent.
+    # TODO: train MuZero agent.
     env = TicTacToeEnv(show_number=True)
     env.reset()
 
@@ -85,7 +86,9 @@ if __name__ == "__main__":
 
             # available_actions = env.available_actions()
             max_value = max(
-                child.value() for action, child in mcts.root.children.items()
+                child.value()
+                for action, child in mcts.root.children.items()
+                if action in env.available_actions()
             )
             print(
                 {
@@ -97,7 +100,9 @@ if __name__ == "__main__":
                 [
                     (a, c)
                     for a, c in mcts.root.children.items()
-                    if c.visit_count > 0 and c.value() == max_value
+                    if c.visit_count > 0
+                    and c.value() == max_value
+                    and a in env.available_actions()
                 ]
             )
 
