@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from src.reinforcement_learning.environments.abstract import AbstractEnviroment
+from src.reinforcement_learning.graph.abstract import AbstractNode
 
 
 class MultiArmedBandit(AbstractEnviroment):
@@ -70,6 +71,9 @@ class MultiArmedBandit(AbstractEnviroment):
 
     def available_actions(self) -> List[int]:
         return list(range(len(self.distribution_parameters)))
+
+    def restore(self, node: AbstractNode) -> Any:
+        raise NotImplementedError
 
     def __str__(self) -> str:
         distributions = [

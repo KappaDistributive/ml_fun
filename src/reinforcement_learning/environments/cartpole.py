@@ -3,12 +3,17 @@ from typing import Any, Dict, List, Optional, Tuple
 import gym
 
 from src.reinforcement_learning.environments.abstract import AbstractEnviroment
+from src.reinforcement_learning.graph.mcts import MCTSNode
+
+
+class CartPoleNode(MCTSNode):
+    def state(self) -> Any:
+        return self.observation
 
 
 class CartPole(AbstractEnviroment):
     def __init__(self):
-        self.environment = gym.make("CartPole-v0")
-        pass
+        self.environment = gym.make("CartPole-v1")
 
     def reset(self) -> Any:
         return self.environment.reset()
@@ -21,3 +26,6 @@ class CartPole(AbstractEnviroment):
 
     def render(self) -> Any:
         return self.environment.render()
+
+    def restore(self, node: CartPoleNode) -> Any:
+        self.environment.state = node.state()
