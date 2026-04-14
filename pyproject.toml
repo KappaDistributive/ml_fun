@@ -10,8 +10,8 @@ tensorflow = "^2.7.0"
 gym = "^0.26.0"
 chess = "^1.7.0"
 tqdm = "^4.62.3"
-# torch = {version = "^2.11.0+cu130", source = "pytorch-cuda"}
-torch = {version = "^2.11.0", source = "torch-cpu"}
+# torch = {version = "^2.10.0+cu130", source = "torch-cuda"}
+torch = {version = "^2.10.0", source = "torch-cpu"}
 gymnasium = {extras = ["toy-text"], version = "^1.2.3"}
 pygame = "^2.6.1"
 matplotlib = "^3.10.8"
@@ -23,11 +23,6 @@ pyyaml = "^6.0.3"
 typed-ast = "^1.5.5"
 wrapt = "^2.0.1"
 grpcio = "^1.80.0"
-
-
-[tool.poetry.extras]
-cuda = ["torch-cuda"]
-cpu = ["torch-cpu"]
 
 [tool.poetry.group.dev.dependencies]
 black = { version = "19.10b0" }
