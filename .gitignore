@@ -4,6 +4,7 @@ tmp/
 __pycache__/
 *.py[cod]
 *$py.class
+ml_fun/games/cartpole/data
 
 # C extensions
 *.so
