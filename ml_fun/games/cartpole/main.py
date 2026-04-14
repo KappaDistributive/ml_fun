@@ -93,7 +93,7 @@ def demo_run(checkpoint_path: Path) -> None:
     render_env = gym.make("CartPole-v1", render_mode="human")
     assert render_env.observation_space.shape is not None
     obs_dim = render_env.observation_space.shape[0]
-    act_dim = render_env.action_space.n
+    act_dim = render_env.action_space.n # type:ignore
     policy = Policy(obs_dim, act_dim)
     policy.load_state_dict(torch.load(checkpoint_path))
 
@@ -141,7 +141,7 @@ if __name__ == "__main__":
         train_env = gym.make("CartPole-v1")
         assert train_env.observation_space.shape is not None
         obs_dim = train_env.observation_space.shape[0]
-        act_dim = train_env.action_space.n
+        act_dim = train_env.action_space.n # type:ignore
 
         policy = Policy(obs_dim, act_dim)
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-2)
