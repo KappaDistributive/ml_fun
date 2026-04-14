@@ -11,8 +11,6 @@ if TYPE_CHECKING:
 
     class FixtureRequest(__FixtureRequest):
         param: Any
-
-
 else:
     from pytest import FixtureRequest
 

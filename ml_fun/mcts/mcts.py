@@ -5,7 +5,7 @@ import math
 import random
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 
 Action = Any
 State = Any
@@ -89,7 +89,7 @@ class MCTS(ABC):
     def _simulate(self, node: Node) -> float:
         raise NotImplemented
 
-    def _traverse(self, node: Node) -> List[Action, Node]:
+    def _traverse(self, node: Node) -> List[Union[Action, Node]]:
         current_action, current_node = (None, node)
         path = []
         while True:
