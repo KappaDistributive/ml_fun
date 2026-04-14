@@ -1,117 +1,158 @@
+from datetime import datetime
+from pathlib import Path
 from typing import List, Tuple
 
 import gymnasium as gym
+import matplotlib.pyplot as plt
 import numpy as np
-import tensorflow as tf
-
-from ml_fun.muzero.game import ReplayBuffer, play_game
-from ml_fun.muzero.model import DenseMuZeroModel
-from ml_fun.muzero.utils import to_one_hot
+import torch
+import torch.nn as nn
+from torch.distributions import Categorical
 
 
-def prepare_batch(
-    batch: List[Tuple[np.ndarray, List[int], List[Tuple[float, float, np.ndarray]]]],
-    action_size: int,
-    lookahead_range: int,
-) -> Tuple[tf.Tensor, List[tf.Tensor], List[tf.Tensor]]:
-    """
-    :param batch: Each entry is of the form (observation, actions, targets).
-    :param action_size: Number of possible actions.
-    :param lookahead_range: Lookahead range.
-    :return: (observations, actions, labels)
-    """
-    observations_batch, actions_batch, labels_batch = [], [], []
-
-    for sample in batch:
-        assert isinstance(sample, tuple)
-        assert len(sample) == 3
-        initial_observation, actions, targets = sample
-
-        while len(actions) < lookahead_range:
-            actions.append(
-                -1
-            )  # gets encoded as the zero vector during one-hot-encoding
-
-        while len(targets) < lookahead_range + 1:
-            targets.append((0.0, 0.0, np.array([1.0 / action_size] * action_size)))
-
-        observations_batch.append(initial_observation)
-        actions_batch.append(
-            [to_one_hot(action, action_size) for action in actions[:lookahead_range]]
+class Policy(nn.Module):
+    def __init__(self, obs_dim: int, act_dim: int, hidden: int = 128):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, act_dim),
         )
 
-        # mu function \mu_{theta}: (o^{0}, a^{1}, ..., a^{K}) |---> (p^{0}, ..., p^{K}, v^{0}, ..., v^{K}, r^{1}, ..., r^{K})
-        values = [np.array([target[0]]) for target in targets]
-        rewards = [np.array([target[1]]) for target in targets[1:]]
-        policies = [target[2] for target in targets]
-        labels_batch.append(policies + values + rewards)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
 
-    return (
-        tf.stack(observations_batch, axis=0),
-        [
-            tf.stack([action[index] for action in actions_batch], axis=0)
-            for index in range(lookahead_range)
-        ],
-        [
-            tf.stack([label[index] for label in labels_batch], axis=0)
-            for index in range(3 * lookahead_range + 2)
-        ],
-    )
+    def act(self, obs: np.ndarray) -> Tuple[int, torch.Tensor]:
+        logits = self.forward(torch.as_tensor(obs, dtype=torch.float32))
+        dist = Categorical(logits=logits)
+        action = dist.sample()
+        action_item = action.item()
+        assert isinstance(action_item, int)
+        return action_item, dist.log_prob(action)
 
 
-def via_muzero() -> None:
-    """
-    Train a MuZero-agent on CartPole.
-    :return: None
-    """
-    # TODO: Add evaluation.
-    # TODO: Add proper logging.
-    # TODO: Save / Restore model.
-    # TODO: Create TensorBoard.
-    environment = gym.make("CartPole-v0")
-    lookahead_range = 5
-    observation_size = environment.observation_space.shape[0]
-    action_size = environment.action_space.n
-    state_size = 32
-    batch_size = 16
-    num_simulations = 5
-    model = DenseMuZeroModel(
-        lookahead_range=lookahead_range,
-        observation_shape=(observation_size,),
-        action_shape=(action_size,),
-        state_size=state_size,
-        hidden_layer_sizes=[32, 32],
-    )
-    replay_buffer = ReplayBuffer(
-        buffer_size=128, batch_size=batch_size, lookahead_range=lookahead_range
-    )
+def compute_returns(rewards: List[float], gamma: float) -> torch.Tensor:
+    returns = []
+    g = 0.0
+    for r in reversed(rewards):
+        g = r + gamma * g
+        returns.append(g)
+    returns.reverse()
+    returns = torch.tensor(returns, dtype=torch.float32)
+    # normalize for stability
+    if len(returns) > 1:
+        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+    return returns
 
-    print(model.mu_model.summary())
 
-    rewards: List[float] = []
+def reinforce(
+    env: gym.Env,
+    policy: Policy,
+    optimizer: torch.optim.Optimizer,
+    num_episodes: int = 1000,
+    gamma: float = 0.99,
+    print_every: int = 50,
+) -> List[float]:
+    all_rewards: List[float] = []
 
-    for sample_step in range(1_000):
-        game = play_game(
-            environment,
-            model,
-            ignore_to_play=True,
-            epsilon=0.00,
-            num_simulations=num_simulations,
-        )
-        rewards.append(sum(game.rewards))
-        print(
-            f"Adding a game with total reward {sum(game.rewards):6.2f} to replay buffer."
-        )
-        print(f"Average reward: {sum(rewards) / len(rewards):6.2f}")
-        print()
-        replay_buffer.save_game(game)
-        for train_step in range(20):
-            batch = replay_buffer.sample_batch()
-            observations, actions, labels = prepare_batch(
-                batch, action_size, lookahead_range
-            )
-            model.train_on_batch(observations, actions, labels)
+    for ep in range(1, num_episodes + 1):
+        obs, _ = env.reset()
+        log_probs: List[torch.Tensor] = []
+        rewards: List[float] = []
+
+        done = False
+        while not done:
+            action, log_prob = policy.act(obs)
+            obs, reward, terminated, truncated, _ = env.step(action)
+            log_probs.append(log_prob)
+            rewards.append(float(reward))
+            done = terminated or truncated
+
+        returns = compute_returns(rewards, gamma)
+        loss = -(torch.stack(log_probs) * returns).sum()
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        ep_reward = sum(rewards)
+        all_rewards.append(ep_reward)
+
+        if ep % print_every == 0:
+            avg = np.mean(all_rewards[-print_every:])
+            print(f"Episode {ep:4d} | reward: {ep_reward:6.1f} | avg(last {print_every}): {avg:.1f}")
+
+        if len(all_rewards) >= 100 and np.mean(all_rewards[-100:]) >= 475.0:
+            print(f"Solved at episode {ep} (avg reward {np.mean(all_rewards[-100:]):.1f})")
+            break
+
+    return all_rewards
+
+
+def demo_run(checkpoint_path: Path) -> None:
+    render_env = gym.make("CartPole-v1", render_mode="human")
+    assert render_env.observation_space.shape is not None
+    obs_dim = render_env.observation_space.shape[0]
+    act_dim = render_env.action_space.n
+    policy = Policy(obs_dim, act_dim)
+    policy.load_state_dict(torch.load(checkpoint_path))
+
+    for i in range(3):
+        obs, _ = render_env.reset()
+        total = 0.0
+        done = False
+        while not done:
+            action, _ = policy.act(obs)
+            obs, reward, terminated, truncated, _ = render_env.step(action)
+            assert isinstance(reward, (float, int))
+            total += reward
+            done = terminated or truncated
+        print(f"Render episode {i + 1}: reward = {total}")
+    render_env.close()
+
+
+def plot_run(plot_path: Path, rewards: List[float]) -> None:
+    episodes = np.arange(1, len(rewards) + 1)
+    running_avg = np.convolve(rewards, np.ones(50) / 50, mode="valid")
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(episodes, rewards, label="Episode Reward", alpha=0.6)
+    plt.plot(episodes[len(episodes) - len(running_avg) :], running_avg, label="Running Average (50)", color="red")
+    plt.xlabel("Episode")
+    plt.ylabel("Reward")
+    plt.title("REINFORCE on CartPole-v1")
+    plt.legend()
+    plt.grid()
+    plt.savefig(plot_path)
+    print(f"Saved reward plot to {plot_path}")
 
 
 if __name__ == "__main__":
-    via_muzero()
+    train = True
+
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    data_dir = Path("ml_fun/games/cartpole/data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    checkpoint_path = data_dir / f"policy_{current_time}.pt"
+    plot_path = data_dir / f"rewards_{current_time}.png"
+
+    if train:
+        train_env = gym.make("CartPole-v1")
+        assert train_env.observation_space.shape is not None
+        obs_dim = train_env.observation_space.shape[0]
+        act_dim = train_env.action_space.n
+
+        policy = Policy(obs_dim, act_dim)
+        optimizer = torch.optim.Adam(policy.parameters(), lr=1e-2)
+
+        print("Training with REINFORCE...")
+        rewards = reinforce(train_env, policy, optimizer)
+        train_env.close()
+
+        plot_run(plot_path, rewards)
+
+        torch.save(policy.state_dict(), checkpoint_path)
+        print(f"Saved model checkpoint to {checkpoint_path}")
+
+    demo_run(checkpoint_path)
