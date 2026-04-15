@@ -10,6 +10,14 @@ import torch.nn as nn
 from torch.distributions import Normal
 
 
+def get_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 class Actor(nn.Module):
     def __init__(self, obs_dim: int, hidden: int = 64):
         super().__init__()
@@ -48,6 +56,7 @@ def collect_rollouts(
     actor: Actor,
     critic: Critic,
     num_episodes: int,
+    device: torch.device,
     reward_scale: float = 0.1,
 ) -> Tuple[
     torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, List[float]
@@ -75,7 +84,7 @@ def collect_rollouts(
 
         done = False
         while not done:
-            obs_t = torch.as_tensor(obs, dtype=torch.float32)
+            obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
             with torch.no_grad():
                 dist = actor(obs_t)
                 value = critic(obs_t)
@@ -97,10 +106,10 @@ def collect_rollouts(
         # compute GAE on scaled rewards
         scaled_rewards = [r * reward_scale for r in ep_rewards_raw]
         values = torch.stack(ep_values)
-        next_value = torch.tensor(0.0)
+        next_value = torch.tensor(0.0, device=device)
         vals = torch.cat([values, next_value.unsqueeze(0)])
 
-        advantages = torch.zeros(len(scaled_rewards))
+        advantages = torch.zeros(len(scaled_rewards), device=device)
         gae = 0.0
         for t in reversed(range(len(scaled_rewards))):
             delta = scaled_rewards[t] + gamma * vals[t + 1] - vals[t]
@@ -131,6 +140,7 @@ def ppo(
     critic: Critic,
     actor_optimizer: torch.optim.Optimizer,
     critic_optimizer: torch.optim.Optimizer,
+    device: torch.device,
     num_updates: int = 2000,
     episodes_per_update: int = 20,
     ppo_epochs: int = 10,
@@ -143,7 +153,7 @@ def ppo(
 
     for update in range(1, num_updates + 1):
         obs, actions, old_log_probs, advantages, returns, ep_rewards = collect_rollouts(
-            env, actor, critic, episodes_per_update
+            env, actor, critic, episodes_per_update, device
         )
         all_rewards.extend(ep_rewards)
 
@@ -211,10 +221,13 @@ def ppo(
     return all_rewards
 
 
-def demo_run(env_name: str, obs_dim: int, checkpoint_path: Path) -> None:
+def demo_run(
+    env_name: str, obs_dim: int, checkpoint_path: Path, device: torch.device
+) -> None:
     render_env = gym.make(env_name, render_mode="human")
     actor = Actor(obs_dim)
-    actor.load_state_dict(torch.load(checkpoint_path))
+    actor.load_state_dict(torch.load(checkpoint_path, map_location=device))
+    actor.to(device)
 
     for i in range(3):
         obs, _ = render_env.reset()
@@ -222,7 +235,7 @@ def demo_run(env_name: str, obs_dim: int, checkpoint_path: Path) -> None:
         done = False
         while not done:
             with torch.no_grad():
-                dist = actor(torch.as_tensor(obs, dtype=torch.float32))
+                dist = actor(torch.as_tensor(obs, dtype=torch.float32, device=device))
             action = dist.mean.clamp(-2.0, 2.0).item()
             obs, reward, terminated, truncated, _ = render_env.step(np.array([action]))
             assert isinstance(reward, (float, int))
@@ -262,18 +275,21 @@ if __name__ == "__main__":
     checkpoint_path = data_dir / f"policy_{current_time}.pt"
     plot_path = data_dir / f"rewards_{current_time}.png"
 
+    device = get_device()
+    print(f"Using device: {device}")
+
     train_env = gym.make(env_name)
 
     assert train_env.observation_space.shape is not None
     obs_dim = train_env.observation_space.shape[0]
 
-    actor = Actor(obs_dim)
-    critic = Critic(obs_dim)
+    actor = Actor(obs_dim).to(device)
+    critic = Critic(obs_dim).to(device)
     actor_optimizer = torch.optim.Adam(actor.parameters(), lr=3e-4)
     critic_optimizer = torch.optim.Adam(critic.parameters(), lr=1e-3)
 
     print("Training with PPO (Gaussian policy)...")
-    rewards = ppo(train_env, actor, critic, actor_optimizer, critic_optimizer)
+    rewards = ppo(train_env, actor, critic, actor_optimizer, critic_optimizer, device)
     train_env.close()
 
     plot_run(plot_path, rewards)
@@ -281,4 +297,4 @@ if __name__ == "__main__":
     torch.save(actor.state_dict(), checkpoint_path)
     print(f"Saved actor checkpoint to {checkpoint_path}")
 
-    demo_run(env_name, obs_dim, checkpoint_path)
+    demo_run(env_name, obs_dim, checkpoint_path, device)
