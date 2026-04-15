@@ -2,9 +2,9 @@ import gzip
 from pathlib import Path
 from urllib import request
 
-import numpy as np
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
 
