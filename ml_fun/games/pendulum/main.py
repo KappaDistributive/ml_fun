@@ -19,7 +19,7 @@ def get_device() -> torch.device:
 
 
 class Actor(nn.Module):
-    def __init__(self, obs_dim: int, hidden: int = 64):
+    def __init__(self, obs_dim: int, hidden: int = 256):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(obs_dim, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(),
@@ -37,7 +37,7 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    def __init__(self, obs_dim: int, hidden: int = 64):
+    def __init__(self, obs_dim: int, hidden: int = 256):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(obs_dim, hidden),
