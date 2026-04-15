@@ -80,10 +80,14 @@ def reinforce(
 
         if ep % print_every == 0:
             avg = np.mean(all_rewards[-print_every:])
-            print(f"Episode {ep:4d} | reward: {ep_reward:6.1f} | avg(last {print_every}): {avg:.1f}")
+            print(
+                f"Episode {ep:4d} | reward: {ep_reward:6.1f} | avg(last {print_every}): {avg:.1f}"
+            )
 
         if len(all_rewards) >= 100 and np.mean(all_rewards[-100:]) >= 475.0:
-            print(f"Solved at episode {ep} (avg reward {np.mean(all_rewards[-100:]):.1f})")
+            print(
+                f"Solved at episode {ep} (avg reward {np.mean(all_rewards[-100:]):.1f})"
+            )
             break
 
     return all_rewards
@@ -93,7 +97,7 @@ def demo_run(checkpoint_path: Path) -> None:
     render_env = gym.make("CartPole-v1", render_mode="human")
     assert render_env.observation_space.shape is not None
     obs_dim = render_env.observation_space.shape[0]
-    act_dim = render_env.action_space.n # type:ignore
+    act_dim = render_env.action_space.n  # type: ignore
     policy = Policy(obs_dim, act_dim)
     policy.load_state_dict(torch.load(checkpoint_path))
 
@@ -117,7 +121,12 @@ def plot_run(plot_path: Path, rewards: List[float]) -> None:
 
     plt.figure(figsize=(12, 6))
     plt.plot(episodes, rewards, label="Episode Reward", alpha=0.6)
-    plt.plot(episodes[len(episodes) - len(running_avg) :], running_avg, label="Running Average (50)", color="red")
+    plt.plot(
+        episodes[len(episodes) - len(running_avg) :],
+        running_avg,
+        label="Running Average (50)",
+        color="red",
+    )
     plt.xlabel("Episode")
     plt.ylabel("Reward")
     plt.title("REINFORCE on CartPole-v1")
@@ -141,7 +150,7 @@ if __name__ == "__main__":
         train_env = gym.make("CartPole-v1")
         assert train_env.observation_space.shape is not None
         obs_dim = train_env.observation_space.shape[0]
-        act_dim = train_env.action_space.n # type:ignore
+        act_dim = train_env.action_space.n  # type: ignore
 
         policy = Policy(obs_dim, act_dim)
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-2)

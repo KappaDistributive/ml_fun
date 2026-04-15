@@ -66,7 +66,9 @@ def naive_search(
         (lookahead_range, action_size)
     ]
     initial_observations = tf.repeat(
-        tf.expand_dims(initial_observation, axis=0), len(all_action_sequences), axis=0,
+        tf.expand_dims(initial_observation, axis=0),
+        len(all_action_sequences),
+        axis=0,
     )  # shape (lookahead_range, observation_size)
 
     output = model.mu_function(

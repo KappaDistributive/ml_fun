@@ -1,6 +1,7 @@
 """
 Play Tic Tac Toe via MCTS
 """
+
 import random
 from copy import deepcopy
 from typing import Tuple

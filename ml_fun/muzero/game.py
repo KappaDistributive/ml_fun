@@ -84,7 +84,7 @@ class Game:
             value = 0.0
 
             for distance, reward in enumerate(self.rewards[index:]):
-                value += reward * (self.discount_factor ** distance)
+                value += reward * (self.discount_factor**distance)
 
             if 1 <= index < len(self.rewards):
                 last_reward = self.rewards[index - 1]
