@@ -6,9 +6,17 @@ import jax
 import jax.numpy as jnp
 import optax
 import orbax.checkpoint as ocp
+from jax import Array
+
+# (W, b) per layer
+Params = list[tuple[Array, Array]]
+# (mlp_params, log_std)
+Actor = tuple[Params, Array]
 
 
-def model_init(key, input_dim: int, hidden_dims: list[int], output_dim: int):
+def model_init(
+    key: Array, input_dim: int, hidden_dims: list[int], output_dim: int
+) -> Params:
     """Initialize a simple MLP: list of (W, b) tuples."""
     params = []
     dims = [input_dim] + hidden_dims + [output_dim]
@@ -26,7 +34,7 @@ def model_init(key, input_dim: int, hidden_dims: list[int], output_dim: int):
     return params
 
 
-def mlp_forward(params, x):
+def mlp_forward(params: Params, x: Array) -> Array:
     for i in range(len(params)):
         w, b = params[i]
         x = jnp.dot(x, w) + b
@@ -35,18 +43,18 @@ def mlp_forward(params, x):
     return x
 
 
-def gaussian_log_prob(action, mean, log_std):
+def gaussian_log_prob(action: Array, mean: Array, log_std: Array) -> Array:
     std = jnp.exp(log_std)
     return jnp.sum(
         -0.5 * ((action - mean) / std) ** 2 - log_std - 0.5 * jnp.log(2 * jnp.pi)
     )
 
 
-def gaussian_entropy(log_std):
+def gaussian_entropy(log_std: Array) -> Array:
     return jnp.sum(log_std + 0.5 * jnp.log(2 * jnp.pi * jnp.e))
 
 
-def compute_returns(rewards, gamma=0.99):
+def compute_returns(rewards: list[float], gamma: float = 0.99) -> Array:
     returns = []
     g = 0.0
     for r in reversed(rewards):
@@ -57,7 +65,9 @@ def compute_returns(rewards, gamma=0.99):
 
 
 @jax.jit
-def select_action(actor, obs, sample_key, action_scale=3.0):
+def select_action(
+    actor: Actor, obs: Array, sample_key: Array, action_scale: float = 3.0
+) -> Array:
     raw_mean = mlp_forward(actor[0], obs)
     mean = jnp.tanh(raw_mean) * action_scale
     std = jnp.exp(actor[1])
@@ -66,13 +76,17 @@ def select_action(actor, obs, sample_key, action_scale=3.0):
 
 
 @jax.jit
-def select_action_deterministic(actor, obs, action_scale=3.0):
+def select_action_deterministic(
+    actor: Actor, obs: Array, action_scale: float = 3.0
+) -> Array:
     raw_mean = mlp_forward(actor[0], obs)
     mean = jnp.tanh(raw_mean) * action_scale
     return mean
 
 
-def rollout(env, actor, rng_key, action_scale=3.0):
+def rollout(
+    env: gym.Env, actor: Actor, rng_key: Array, action_scale: float = 3.0
+) -> tuple[list[Array], list[Array], list[float], Array]:
     obs, _ = env.reset()
     done = False
     observations, actions, rewards = [], [], []
@@ -88,7 +102,10 @@ def rollout(env, actor, rng_key, action_scale=3.0):
     return observations, actions, rewards, rng_key
 
 
-def make_update_fn(actor_optimizer, critic_optimizer):
+def make_update_fn(
+    actor_optimizer: optax.GradientTransformation,
+    critic_optimizer: optax.GradientTransformation,
+):
     @jax.jit
     def update(
         actor,
@@ -154,17 +171,17 @@ def make_update_fn(actor_optimizer, critic_optimizer):
 
 
 def train_step(
-    env,
-    actor,
-    critic,
+    env: gym.Env,
+    actor: Actor,
+    critic: Params,
     update_fn,
-    actor_opt_state,
-    critic_opt_state,
-    rng_key,
-    num_episodes=16,
-    gamma=0.99,
-    entropy_coeff=0.01,
-    action_scale=3.0,
+    actor_opt_state: optax.OptState,
+    critic_opt_state: optax.OptState,
+    rng_key: Array,
+    num_episodes: int = 16,
+    gamma: float = 0.99,
+    entropy_coeff: float = 0.01,
+    action_scale: float = 3.0,
 ):
     # Data collection (Python loop — can't JIT due to env.step)
     all_obs, all_act, all_ret = [], [], []
