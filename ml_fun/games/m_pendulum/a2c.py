@@ -34,6 +34,9 @@ def model_init(
     return params
 
 
+jax.jit
+
+
 def mlp_forward(params: Params, x: Array) -> Array:
     for i in range(len(params)):
         w, b = params[i]
@@ -43,6 +46,9 @@ def mlp_forward(params: Params, x: Array) -> Array:
     return x
 
 
+jax.jit
+
+
 def gaussian_log_prob(action: Array, mean: Array, log_std: Array) -> Array:
     std = jnp.exp(log_std)
     return jnp.sum(
@@ -50,6 +56,7 @@ def gaussian_log_prob(action: Array, mean: Array, log_std: Array) -> Array:
     )
 
 
+@jax.jit
 def gaussian_entropy(log_std: Array) -> Array:
     return jnp.sum(log_std + 0.5 * jnp.log(2 * jnp.pi * jnp.e))
 
@@ -228,6 +235,23 @@ def train_step(
     )
 
 
+def visualize(actor: Actor, num_episodes: int = 5):
+    visual_env = gym.make(
+        "InvertedPendulum-v5", render_mode="human", max_episode_steps=2_000
+    )
+    for _ in range(num_episodes):
+        obs, _ = visual_env.reset()
+        done = False
+        while not done:
+            visual_env.render()
+            time.sleep(1.0 / 30.0)
+            obs_jnp = jnp.array(obs)
+            action = select_action_deterministic(actor, obs_jnp)
+            obs, _, terminated, truncated, _ = visual_env.step(jnp.array(action))
+            done = terminated or truncated
+    visual_env.close()
+
+
 if __name__ == "__main__":
     env = gym.make("InvertedPendulum-v5")
     data_dir = Path(__file__).parent / "data"
@@ -306,16 +330,4 @@ if __name__ == "__main__":
             actor_opt_path = data_dir / f"actor_opt_{timestamp}_step_{step + 1:04d}.npz"
             checkpointer.save(actor_opt_path, actor_opt_state)
 
-            visual_env = gym.make(
-                "InvertedPendulum-v5", render_mode="human", max_episode_steps=2_000
-            )
-            obs, _ = visual_env.reset()
-            done = False
-            while not done:
-                visual_env.render()
-                time.sleep(1.0 / 30.0)
-                obs_jnp = jnp.array(obs)
-                action = select_action_deterministic(actor, obs_jnp)
-                obs, _, terminated, truncated, _ = visual_env.step(jnp.array(action))
-                done = terminated or truncated
-            visual_env.close()
+            # visualize(actor)
