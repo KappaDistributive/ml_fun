@@ -34,9 +34,7 @@ def model_init(
     return params
 
 
-jax.jit
-
-
+@jax.jit
 def mlp_forward(params: Params, x: Array) -> Array:
     for i in range(len(params)):
         w, b = params[i]
@@ -46,9 +44,7 @@ def mlp_forward(params: Params, x: Array) -> Array:
     return x
 
 
-jax.jit
-
-
+@jax.jit
 def gaussian_log_prob(action: Array, mean: Array, log_std: Array) -> Array:
     std = jnp.exp(log_std)
     return jnp.sum(
