@@ -37,8 +37,6 @@ def load_mnist() -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     with gzip.open(download(files[3]), "rb") as f:
         test_labels = np.frombuffer(f.read(), np.uint8, offset=8)
 
-    print(train_images.shape, train_labels.shape, test_images.shape, test_labels.shape)
-
     return (
         jnp.array(train_images, dtype=jnp.float32) / 255.0,
         jnp.array(train_labels, dtype=jnp.int32),
@@ -61,6 +59,7 @@ def ffn_init(input_dim: int, hidden_dim: int, output_dim: int) -> optax.Params:
     }
 
 
+@jax.jit
 def ffn_forward(params: dict[str, jnp.ndarray], x: jnp.ndarray) -> jnp.ndarray:
     z1 = jnp.dot(x, params["W1"]) + params["b1"]
     a1 = jax.nn.relu(z1)
@@ -68,8 +67,8 @@ def ffn_forward(params: dict[str, jnp.ndarray], x: jnp.ndarray) -> jnp.ndarray:
     return z2
 
 
+@jax.jit
 def cross_entropy_loss(logits: jnp.ndarray, labels: jnp.ndarray) -> jnp.ndarray:
-    print("Shapes logits / labels:", logits.shape, labels.shape)
     one_hot_labels = jax.nn.one_hot(labels, num_classes=logits.shape[1])
     log_probs = jax.nn.log_softmax(logits)
     return -jnp.mean(jnp.sum(one_hot_labels * log_probs, axis=1))
