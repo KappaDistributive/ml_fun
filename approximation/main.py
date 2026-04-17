@@ -22,6 +22,8 @@ if __name__ == "__main__":
     estimate = euler_method(df, xs, f(xs[0]))
 
     print(estimate)
-    sns.scatterplot(x=(e[0] for e in estimate), y=(e[1] for e in estimate))
-    sns.scatterplot(x=(e[0] for e in estimate), y=(f(e[0]) for e in estimate))
+    sns.scatterplot(x=(e[0] for e in estimate), y=(e[1] for e in estimate), color="red")
+    sns.scatterplot(
+        x=(e[0] for e in estimate), y=(f(e[0]) for e in estimate), color="green"
+    )
     plt.show()
