@@ -57,7 +57,7 @@ class Config:
     log_interval: int = 5_000
     eval_interval: int = 20_000
     eval_episodes: int = 10
-    visual: bool = has_display()  # Whether to render during evaluation
+    visual: bool = False  # Whether to render during evaluation
     data_dir: Path = Path(__file__).parent / "data"  # For saving models, logs, etc.
 
 
@@ -253,6 +253,12 @@ class SAC:
             "alpha": self.alpha.item(),
             "alpha_loss": alpha_loss.item(),
         }
+
+    def load_state_dict(self, state_dict: dict) -> None:
+        self.actor.load_state_dict(state_dict["actor"])
+        self.critic.load_state_dict(state_dict["critic"])
+        self.critic_target.load_state_dict(state_dict["critic_target"])
+        self.log_alpha = state_dict["log_alpha"]
 
 
 def mlp(
