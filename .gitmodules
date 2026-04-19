@@ -1,0 +1,3 @@
+[submodule "ml_fun/games/so101/sim"]
+	path = ml_fun/games/so101/sim
+	url = https://github.com/TheRobotStudio/SO-ARM100
