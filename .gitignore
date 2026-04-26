@@ -1,10 +1,12 @@
 # Custom
 tmp/
+.DS_Store
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 ml_fun/games/*/data
+kaggle/*/data
 ml_fun/tutorials/*/data
 
 # C extensions
