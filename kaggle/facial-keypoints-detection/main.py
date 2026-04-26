@@ -7,7 +7,6 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 from torch._C import device as device_t
 from torch.utils.data import DataLoader, Dataset
@@ -120,6 +119,7 @@ if __name__ == "__main__":
     eval_loader = DataLoader(eval_data, batch_size=32, shuffle=False)
 
     loss_q = deque(maxlen=100)
+    loss_fct = nn.MSELoss(reduction="none")
 
     for e_idx, epoch in enumerate(range(100)):
         for b_idx, (images, keypoints) in enumerate(train_loader):
@@ -127,7 +127,7 @@ if __name__ == "__main__":
             optimizer.zero_grad()
             output = net(images)
             mask = keypoints != -1.0
-            loss = F.mse_loss(output, keypoints, reduction="none")
+            loss = loss_fct(output, keypoints)
             loss = (loss * mask).sum() / mask.sum()
             loss.backward()
             loss_q.append(96.0 * sqrt(loss.item()))
@@ -144,7 +144,7 @@ if __name__ == "__main__":
                 images, keypoints = images.to(device), keypoints.to(device)
                 output = net(images)
                 mask = keypoints != -1.0
-                loss = F.mse_loss(output, keypoints, reduction="none")
+                loss = loss_fct(output, keypoints)
                 loss = (loss * mask).sum() / mask.sum()
                 eval_loss_q.append(96.0 * sqrt(loss.item()))
             print(
