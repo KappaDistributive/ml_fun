@@ -5,7 +5,7 @@ tmp/
 __pycache__/
 *.py[cod]
 *$py.class
-ml_fun/games/*/data
+ml_fun/**/*/data/
 kaggle/*/data
 ml_fun/tutorials/*/data
 
