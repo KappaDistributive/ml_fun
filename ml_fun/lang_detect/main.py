@@ -20,6 +20,8 @@ with open(LANG_CODES_PATH, "r") as f:
         lang = line.strip()
         assert lang, "Empty line found in lang_codes.txt -- aborting!"
         IDX2LANG.append(lang)
+    assert "unknown" not in IDX2LANG, "Found 'nan' in lang_codes.txt -- aborting!"
+    IDX2LANG.append("unknown")
 LANG2IDX: dict[str, int] = {lang: idx for idx, lang in enumerate(IDX2LANG)}
 
 
@@ -117,7 +119,9 @@ class Data(Dataset):
             if not text or not isinstance(text, str):
                 continue
             label = labels[idx]
-            if not label or not isinstance(label, str) or label not in LANG2IDX:
+            if not label or not isinstance(label, str):
+                if label not in IDX2LANG:
+                    label = "unknown"
                 continue
             self.texts.append(text)
             self.labels.append(label)
