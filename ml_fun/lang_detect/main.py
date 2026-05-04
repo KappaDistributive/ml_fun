@@ -27,26 +27,29 @@ LANG2IDX: dict[str, int] = {lang: idx for idx, lang in enumerate(IDX2LANG)}
 
 class ByteNgramEmbed(nn.Module):
 
-    def __init__(self, num_buckets=4096, embed_dim=64, n=3):
+    def __init__(self, num_buckets: int = 4096, embed_dim: int = 64, n: int = 3):
         super().__init__()
         self.n = n
         self.num_buckets = num_buckets
         self.embed = nn.Embedding(num_buckets, embed_dim)
 
-    def forward(self, byte_ids):
-        B, T = byte_ids.shape
+    def forward(self, byte_ids: torch.LongTensor) -> torch.LongTensor:
+        # shape byte_ids: (batch_size = b, max_len = t)
+        b, t = byte_ids.shape
         clamped = byte_ids.clamp(max=255)
         padded = F.pad(clamped, (0, self.n - 1), value=0)
         # h[0,0] = padded[0,0] * 256**(n-1) + padded[0,1] * 256**(n-2) + .. + padded[0,n-1]
-        h = torch.zeros(B, T, dtype=torch.long, device=byte_ids.device)
+        h = torch.zeros(b, t, dtype=torch.long, device=byte_ids.device)
         for i in range(self.n):
-            h = h * 257 + padded[:, i : i + T]
-        return self.embed(h % self.num_buckets)
+            h = h * 256 + padded[:, i : i + t]
+        result = self.embed(h % self.num_buckets)
+        # shape result: (b, t, embed_dim)
+        return result
 
 
 class ByteConvBlock(nn.Module):
 
-    def __init__(self, d_model, kernel_size=15, expand=2):
+    def __init__(self, d_model: int, kernel_size: int = 15, expand: int = 2):
         super().__init__()
         self.norm1 = nn.LayerNorm(d_model)
         self.pad = kernel_size - 1
@@ -57,7 +60,8 @@ class ByteConvBlock(nn.Module):
         self.ffn_up = nn.Linear(d_model, ffn, bias=False)
         self.ffn_down = nn.Linear(ffn, d_model, bias=False)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # shape x: (batch_size = b, seq_len = t, d_model = d)
         residual = x
         x = self.norm1(x).transpose(1, 2)
         x = F.pad(x, (self.pad, 0))
@@ -67,10 +71,12 @@ class ByteConvBlock(nn.Module):
         residual = x
         x = self.norm2(x)
         x = self.ffn_down(F.silu(self.ffn_gate(x)) * self.ffn_up(x))
-        return residual + x
+        x = residual + x
+        # shape x: (b, t, d)
+        return x
 
 
-def _rope(q, k):
+def _rope(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     head_dim = q.shape[-1]
     seq_len = q.shape[-2]
     freqs = 1.0 / (
@@ -90,7 +96,7 @@ def _rope(q, k):
 
 class ByteAttnBlock(nn.Module):
 
-    def __init__(self, d_model, n_heads=4, expand=2):
+    def __init__(self, d_model: int, n_heads: int = 4, expand: int = 2):
         super().__init__()
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
@@ -103,38 +109,41 @@ class ByteAttnBlock(nn.Module):
         self.ffn_up = nn.Linear(d_model, ffn, bias=False)
         self.ffn_down = nn.Linear(ffn, d_model, bias=False)
 
-    def forward(self, x):
-        B, T, D = x.shape
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # shape x: (batch_size = b, seq_len = t, d_model = d)
+        b, t, d = x.shape
         residual = x
         h = self.norm1(x)
-        qkv = self.qkv(h).reshape(B, T, 3, self.n_heads, self.head_dim)
+        qkv = self.qkv(h).reshape(b, t, 3, self.n_heads, self.head_dim)
         q, k, v = (t.transpose(1, 2) for t in qkv.unbind(dim=2))
         q, k = _rope(q, k)
         attn = (q @ k.transpose(-2, -1)) / (self.head_dim**0.5)
         attn = attn.softmax(dim=-1)
-        out = (attn @ v).transpose(1, 2).contiguous().view(B, T, D)
+        out = (attn @ v).transpose(1, 2).contiguous().view(b, t, d)
         x = residual + self.out_proj(out)
 
         residual = x
         h = self.norm2(x)
         h = self.ffn_down(F.silu(self.ffn_gate(h)) * self.ffn_up(h))
-        return residual + h
+        x = residual + h
+        # x shape: (b, t, d)
+        return x
 
 
 class ByteHybrid(nn.Module):
 
     def __init__(
         self,
-        num_classes,
-        d_model=256,
-        n_conv=3,
-        n_attn=1,
-        n_heads=4,
-        ffn_expand=2,
-        max_len=512,
-        conv_kernel=15,
-        ngram_buckets=0,
-        ngram_dim=64,
+        num_classes: int,
+        d_model: int = 256,
+        n_conv: int = 3,
+        n_attn: int = 1,
+        n_heads: int = 4,
+        ffn_expand: int = 2,
+        max_len: int = 512,
+        conv_kernel: int = 15,
+        ngram_buckets: int = 0,
+        ngram_dim: int = 64,
     ):
         super().__init__()
         self.max_len = max_len
@@ -161,7 +170,7 @@ class ByteHybrid(nn.Module):
             nn.Linear(d_model, num_classes),
         )
 
-    def forward(self, byte_ids):
+    def forward(self, byte_ids: torch.LongTensor) -> torch.FloatTensor:
         pad_mask = byte_ids != 256
         x = self.embed(byte_ids)
         if self.ngram_embed is not None:
@@ -301,6 +310,13 @@ if __name__ == "__main__":
     train_loader = DataLoader(Data(df), batch_size=128, shuffle=True)
     eval_loader = DataLoader(Data(load_data_cached("validation")), batch_size=128)
 
+    for name, param in net.named_parameters():
+        if param.requires_grad:
+            print(f"{name}: {param.shape}, {param.numel():_}")
+    print(
+        f"{sum(p.numel() for p in net.parameters() if p.requires_grad):_} total parameters"
+    )
+
     for epoch in range(10):
         net.train()
         total_loss = 0.0
@@ -313,7 +329,7 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-            if (b_idx + 1) % (num_steps // 100) == 0:
+            if (b_idx + 1) % (num_steps // 10) == 0:
                 print(f"Batch {b_idx+1} Loss: {loss.item():.4f}")
                 net.eval()
                 print(f"Accuracy: {100.* evaluate(net, eval_loader):.4f}%")
