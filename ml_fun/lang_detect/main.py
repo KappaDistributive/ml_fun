@@ -265,7 +265,7 @@ class Data(Dataset):
         return byte_ids, label_idx
 
 
-def evaluate(net: Net, data_loader: DataLoader) -> float:
+def evaluate(net: nn.Module, data_loader: DataLoader) -> float:
     correct = 0
     total = 0
     device = next(net.parameters()).device
@@ -313,8 +313,11 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-            if (b_idx + 1) % (num_steps // 10) == 0:
+            if (b_idx + 1) % (num_steps // 100) == 0:
                 print(f"Batch {b_idx+1} Loss: {loss.item():.4f}")
+                net.eval()
+                print(f"Accuracy: {100.* evaluate(net, eval_loader):.4f}%")
+                net.train()
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch+1}, Loss: {avg_loss:.4f}")
         net.eval()
