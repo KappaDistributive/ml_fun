@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import numpy as np
@@ -289,6 +290,8 @@ def evaluate(net: nn.Module, data_loader: DataLoader) -> float:
 
 
 if __name__ == "__main__":
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    print(f"Starting training at {timestamp}")
     device = torch.device("cpu")
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -339,3 +342,12 @@ if __name__ == "__main__":
         net.eval()
         print(f"Accuracy: {100.* evaluate(net, eval_loader):.4f}%")
         net.train()
+        (DATA_DIR / "checkpoints").mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                "epoch": epoch + 1,
+                "model_state_dict": net.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+            },
+            DATA_DIR / "checkpoints" / f"byte_hybrid_epoch_{timestamp}_{epoch+1}.pt",
+        )
