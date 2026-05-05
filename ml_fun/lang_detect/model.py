@@ -1,0 +1,163 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class ByteNgramEmbed(nn.Module):
+
+    def __init__(self, num_buckets: int = 4096, embed_dim: int = 64, n: int = 3):
+        super().__init__()
+        self.n = n
+        self.num_buckets = num_buckets
+        self.embed = nn.Embedding(num_buckets, embed_dim)
+
+    def forward(self, byte_ids: torch.LongTensor) -> torch.LongTensor:
+        # shape byte_ids: (batch_size = b, max_len = t)
+        b, t = byte_ids.shape
+        clamped = byte_ids.clamp(max=255)
+        padded = F.pad(clamped, (0, self.n - 1), value=0)
+        # h[0,0] = padded[0,0] * 256**(n-1) + padded[0,1] * 256**(n-2) + .. + padded[0,n-1]
+        h = torch.zeros(b, t, dtype=torch.long, device=byte_ids.device)
+        for i in range(self.n):
+            h = h * 256 + padded[:, i : i + t]
+        result = self.embed(h % self.num_buckets)
+        # shape result: (b, t, embed_dim)
+        return result
+
+
+class ByteConvBlock(nn.Module):
+
+    def __init__(self, d_model: int, kernel_size: int = 15, expand: int = 2):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.pad = kernel_size - 1
+        self.conv = nn.Conv1d(d_model, d_model, kernel_size, groups=d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        ffn = d_model * expand
+        self.ffn_gate = nn.Linear(d_model, ffn, bias=False)
+        self.ffn_up = nn.Linear(d_model, ffn, bias=False)
+        self.ffn_down = nn.Linear(ffn, d_model, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # shape x: (batch_size = b, seq_len = t, d_model = d)
+        residual = x
+        x = self.norm1(x).transpose(1, 2)
+        x = F.pad(x, (self.pad, 0))
+        x = F.silu(self.conv(x)).transpose(1, 2)
+        x = residual + x
+
+        residual = x
+        x = self.norm2(x)
+        x = self.ffn_down(F.silu(self.ffn_gate(x)) * self.ffn_up(x))
+        x = residual + x
+        # shape x: (b, t, d)
+        return x
+
+
+def _rope(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    head_dim = q.shape[-1]
+    seq_len = q.shape[-2]
+    freqs = 1.0 / (
+        10000.0 ** (torch.arange(0, head_dim, 2, device=q.device).float() / head_dim)
+    )
+    t = torch.arange(seq_len, device=q.device)
+    a = torch.outer(t, freqs)
+    cos = a.cos().to(q.dtype)
+    sin = a.sin().to(q.dtype)
+
+    def rot(x):
+        x1, x2 = x[..., : head_dim // 2], x[..., head_dim // 2 :]
+        return torch.cat([x1 * cos - x2 * sin, x2 * cos + x1 * sin], dim=-1)
+
+    return rot(q), rot(k)
+
+
+class ByteAttnBlock(nn.Module):
+
+    def __init__(self, d_model: int, n_heads: int = 4, expand: int = 2):
+        super().__init__()
+        self.n_heads = n_heads
+        self.head_dim = d_model // n_heads
+        self.norm1 = nn.LayerNorm(d_model)
+        self.qkv = nn.Linear(d_model, 3 * d_model, bias=False)
+        self.out_proj = nn.Linear(d_model, d_model, bias=False)
+        self.norm2 = nn.LayerNorm(d_model)
+        ffn = d_model * expand
+        self.ffn_gate = nn.Linear(d_model, ffn, bias=False)
+        self.ffn_up = nn.Linear(d_model, ffn, bias=False)
+        self.ffn_down = nn.Linear(ffn, d_model, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # shape x: (batch_size = b, seq_len = t, d_model = d)
+        b, t, d = x.shape
+        residual = x
+        h = self.norm1(x)
+        qkv = self.qkv(h).reshape(b, t, 3, self.n_heads, self.head_dim)
+        q, k, v = (t.transpose(1, 2) for t in qkv.unbind(dim=2))
+        q, k = _rope(q, k)
+        attn = (q @ k.transpose(-2, -1)) / (self.head_dim**0.5)
+        attn = attn.softmax(dim=-1)
+        out = (attn @ v).transpose(1, 2).contiguous().view(b, t, d)
+        x = residual + self.out_proj(out)
+
+        residual = x
+        h = self.norm2(x)
+        h = self.ffn_down(F.silu(self.ffn_gate(h)) * self.ffn_up(h))
+        x = residual + h
+        # x shape: (b, t, d)
+        return x
+
+
+class ByteHybrid(nn.Module):
+
+    def __init__(
+        self,
+        num_classes: int,
+        d_model: int = 256,
+        n_conv: int = 3,
+        n_attn: int = 1,
+        n_heads: int = 4,
+        ffn_expand: int = 2,
+        max_len: int = 512,
+        conv_kernel: int = 15,
+        ngram_buckets: int = 0,
+        ngram_dim: int = 64,
+    ):
+        super().__init__()
+        self.max_len = max_len
+
+        # Byte values 0–255 plus index 256 = padding token
+        self.embed = nn.Embedding(257, d_model, padding_idx=256)
+
+        self.ngram_embed = None
+        if ngram_buckets > 0:
+            self.ngram_embed = ByteNgramEmbed(ngram_buckets, ngram_dim, n=3)
+            self.ngram_proj = nn.Linear(ngram_dim, d_model, bias=False)
+
+        self.conv_layers = nn.ModuleList(
+            [ByteConvBlock(d_model, conv_kernel, ffn_expand) for _ in range(n_conv)]
+        )
+        self.attn_layers = nn.ModuleList(
+            [ByteAttnBlock(d_model, n_heads, ffn_expand) for _ in range(n_attn)]
+        )
+        self.final_norm = nn.LayerNorm(d_model)
+        self.head = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(d_model, num_classes),
+        )
+
+    def forward(self, byte_ids: torch.LongTensor) -> torch.FloatTensor:
+        pad_mask = byte_ids != 256
+        x = self.embed(byte_ids)
+        if self.ngram_embed is not None:
+            x = x + self.ngram_proj(self.ngram_embed(byte_ids))
+        for layer in self.conv_layers:
+            x = layer(x)
+        for layer in self.attn_layers:
+            x = layer(x)
+        x = self.final_norm(x)
+        mask = pad_mask.unsqueeze(-1).to(x.dtype)
+        x = (x * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
+        return self.head(x)
