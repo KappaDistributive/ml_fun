@@ -7,13 +7,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from ml_fun.lang_detect.data import (
-    DATA_DIR,
-    IDX2LANG,
-    LangIdData,
-    embed,
-    load_data_cached,
-)
+from ml_fun.lang_detect.data import DATA_DIR, IDX2LANG, LangIdData, load_data_cached
 from ml_fun.lang_detect.model import ByteHybrid
 
 
@@ -31,7 +25,7 @@ def evaluate(net: nn.Module, data_loader: DataLoader) -> float:
     return accuracy
 
 
-if __name__ == "__main__":
+def train() -> None:
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     print(f"Starting training at {timestamp}")
     device = torch.device("cpu")
@@ -93,3 +87,7 @@ if __name__ == "__main__":
             },
             DATA_DIR / "checkpoints" / f"byte_hybrid_epoch_{timestamp}_{epoch+1}.pt",
         )
+
+
+if __name__ == "__main__":
+    train()
