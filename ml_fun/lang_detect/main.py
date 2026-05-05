@@ -8,21 +8,22 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from ml_fun.lang_detect.data import DATA_DIR, IDX2LANG, LangIdData, load_data_cached
+from ml_fun.lang_detect.metrics import accuracy, f1_score
 from ml_fun.lang_detect.model import ByteHybrid
 
 
-def evaluate(net: nn.Module, data_loader: DataLoader) -> float:
-    correct = 0
-    total = 0
-    device = next(net.parameters()).device
-    with torch.no_grad():
-        for byte_ids, labels in data_loader:
-            logits = net(byte_ids.to(device))
-            predictions = torch.argmax(logits, dim=1).cpu()
-            correct += (predictions == labels).sum().item()
-            total += labels.size(0)
-    accuracy = correct / total if total > 0 else 0.0
-    return accuracy
+def predict(
+    net: nn.Module, data_loader: DataLoader, device: torch.device
+) -> tuple[list[int], list[int]]:
+    predictions: list[int] = []
+    labels: list[int] = []
+    for byte_ids, batch_labels in data_loader:
+        with torch.no_grad():
+            batch_logits = net(byte_ids.to(device))
+            batch_preds = batch_logits.argmax(dim=1).cpu().tolist()
+            predictions.extend(batch_preds)
+            labels.extend(batch_labels.tolist())
+    return predictions, labels
 
 
 def train() -> None:
@@ -68,15 +69,21 @@ def train() -> None:
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-            if (b_idx + 1) % (num_steps // 10) == 0:
+            if (b_idx + 1) % (num_steps // 100) == 0:
                 print(f"Batch {b_idx+1} Loss: {loss.item():.4f}")
                 net.eval()
-                print(f"Accuracy: {100.* evaluate(net, eval_loader):.4f}%")
+                predictions, labels = predict(net, eval_loader, device)
                 net.train()
+                print(f"Accuracy: {100.* accuracy(predictions, labels):.4f}%")
+                macro_f1 = sum(
+                    f1_score(predictions, labels, class_id=lang_id)
+                    for lang_id in range(len(IDX2LANG))
+                ) / len(IDX2LANG)
+                print(f"Macro F1 Score: {macro_f1:.4f}")
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch+1}, Loss: {avg_loss:.4f}")
         net.eval()
-        print(f"Accuracy: {100.* evaluate(net, eval_loader):.4f}%")
+        print(f"Accuracy: {100.* accuracy(net, eval_loader):.4f}%")
         net.train()
         (DATA_DIR / "checkpoints").mkdir(parents=True, exist_ok=True)
         torch.save(
