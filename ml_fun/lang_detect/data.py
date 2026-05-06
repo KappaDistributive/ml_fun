@@ -46,11 +46,11 @@ def load_data_cached(split: str) -> pl.DataFrame:
             f"Invalid split '{split}'. Valid splits are: {list(DATA_SPLITS.keys())}"
         )
 
-    local_path = DATA_DIR / DATA_SPLITS[split]
+    local_path = DATA_DIR / "commonlingua" / DATA_SPLITS[split]
     if not local_path.exists():
         local_path.parent.mkdir(parents=True, exist_ok=True)
         print(f"Downloading {split} split from Hugging Face...")
-        df = pl.read_parquet(DATA_BASE_URL + DATA_SPLITS[split])
+        df = pl.read_parquet(str(local_path.absolute()))
         df.write_parquet(local_path)
         print(f"Saved {split} split to cache at {local_path}")
     else:

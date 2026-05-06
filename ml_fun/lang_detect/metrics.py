@@ -1,10 +1,18 @@
 import numpy as np
 
 
-def accuracy(predictions: np.ndarray, labels: np.ndarray) -> float:
+def accuracy(
+    predictions: np.ndarray, labels: np.ndarray, class_id: int | None = None
+) -> float:
     assert len(predictions) == len(
         labels
     ), "Length of predictions and labels must be the same."
+    if class_id is not None:
+        mask = labels == class_id
+        if np.sum(mask) == 0:
+            return 0.0
+        predictions = predictions[mask]
+        labels = labels[mask]
     return float(np.mean(predictions == labels, dtype=np.float32))
 
 

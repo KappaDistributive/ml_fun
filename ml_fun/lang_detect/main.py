@@ -30,6 +30,7 @@ def predict(
 def train() -> None:
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     print(f"Starting training at {timestamp}")
+    num_epochs = 10
     num_evals_per_epoch = 10
     device = torch.device("cpu")
     if torch.cuda.is_available():
@@ -59,7 +60,7 @@ def train() -> None:
         f"{sum(p.numel() for p in net.parameters() if p.requires_grad):_} total parameters"
     )
 
-    for epoch in range(10):
+    for epoch in range(num_epochs):
         net.train()
         total_loss = 0.0
         p_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}")
