@@ -1,5 +1,6 @@
 import time
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,7 +15,7 @@ from ml_fun.lang_detect.model import ByteHybrid
 
 def predict(
     net: nn.Module, data_loader: DataLoader, device: torch.device
-) -> tuple[list[int], list[int]]:
+) -> tuple[np.ndarray, np.ndarray]:
     predictions: list[int] = []
     labels: list[int] = []
     for byte_ids, batch_labels in data_loader:
@@ -23,12 +24,13 @@ def predict(
             batch_preds = batch_logits.argmax(dim=1).cpu().tolist()
             predictions.extend(batch_preds)
             labels.extend(batch_labels.tolist())
-    return predictions, labels
+    return np.asarray(predictions), np.asarray(labels)
 
 
 def train() -> None:
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     print(f"Starting training at {timestamp}")
+    num_evals_per_epoch = 10
     device = torch.device("cpu")
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -69,8 +71,9 @@ def train() -> None:
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-            if (b_idx + 1) % (num_steps // 100) == 0:
+            if (b_idx + 1) % (num_steps // num_evals_per_epoch) == 0:
                 print(f"Batch {b_idx+1} Loss: {loss.item():.4f}")
+                print("Starting evaluation...")
                 net.eval()
                 predictions, labels = predict(net, eval_loader, device)
                 net.train()
@@ -82,9 +85,18 @@ def train() -> None:
                 print(f"Macro F1 Score: {macro_f1:.4f}")
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch+1}, Loss: {avg_loss:.4f}")
+        print("Starting evaluation...")
         net.eval()
-        print(f"Accuracy: {100.* accuracy(net, eval_loader):.4f}%")
+        predictions, labels = predict(net, eval_loader, device)
         net.train()
+        print(f"Accuracy: {100.* accuracy(predictions, labels):.4f}%")
+        macro_f1 = sum(
+            f1_score(predictions, labels, class_id=lang_id)
+            for lang_id in range(len(IDX2LANG))
+        ) / len(IDX2LANG)
+        print(f"Macro F1 Score: {macro_f1:.4f}")
+
+        print(f"Saving checkpoint for epoch {epoch+1}...")
         (DATA_DIR / "checkpoints").mkdir(parents=True, exist_ok=True)
         torch.save(
             {
