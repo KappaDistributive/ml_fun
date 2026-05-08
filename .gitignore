@@ -13,6 +13,7 @@ ml_fun/tutorials/*/data
 *.so
 
 # Distribution / packaging
+.aim
 .Python
 build/
 develop-eggs/

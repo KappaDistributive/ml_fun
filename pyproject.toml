@@ -32,6 +32,7 @@ dependencies = [
     "imageio>=2.37.3",
     "dm-control>=1.0.39",
     "polars>=1.40.1",
+    "aim>=3.29.1",
 ]
 
 [dependency-groups]
