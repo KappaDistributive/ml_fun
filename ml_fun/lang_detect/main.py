@@ -1,5 +1,6 @@
 import time
 
+import aim
 import numpy as np
 import torch
 import torch.nn as nn
@@ -27,7 +28,46 @@ def predict(
     return np.asarray(predictions), np.asarray(labels)
 
 
+def log_hparams(
+    net: nn.Module,
+    optimizer: optim.Optimizer,
+    device: torch.device,
+    num_epochs: int,
+    run: aim.Run,
+) -> None:
+    print(net)
+    num_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
+    run["hparams"] = {
+        "net": {
+            "class": net.__class__.__name__,
+            "num_classes": net.num_classes,
+            "d_model": net.d_model,
+            "n_conv": net.n_conv,
+            "n_attn": net.n_attn,
+            "n_heads": net.n_heads,
+            "ffn_expand": net.ffn_expand,
+            "conv_kernel": net.conv_kernel,
+            "ngram_buckets": net.ngram_buckets,
+            "ngram_dim": net.ngram_dim,
+            "max_len": net.max_len,
+            "num_epochs": num_epochs,
+            "learning_rate": optimizer.param_groups[0]["lr"],
+            "num_params": num_params,
+        },
+        "optimizer": {
+            "class": optimizer.__class__.__name__,
+            "learning_rate": optimizer.param_groups[0]["lr"],
+        },
+        "misc": {
+            "device": str(device),
+            "epochs": num_epochs,
+        },
+    }
+    print(f"Total parameters: {num_params:_}")
+
+
 def train() -> None:
+    run = aim.Run(experiment="lang_detect")
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     print(f"Starting training at {timestamp}")
     num_epochs = 10
@@ -45,20 +85,17 @@ def train() -> None:
         n_conv=3,
         n_attn=1,
         n_heads=4,
+        ffn_expand=2,
         conv_kernel=15,
         ngram_buckets=4096,
         ngram_dim=64,
+        max_len=512,
     ).to(device)
     optimizer = optim.Adam(net.parameters(), lr=1e-3)
     train_loader = DataLoader(LangIdData(df), batch_size=128, shuffle=True)
     eval_loader = DataLoader(LangIdData(load_data_cached("validation")), batch_size=128)
 
-    for name, param in net.named_parameters():
-        if param.requires_grad:
-            print(f"{name}: {param.shape}, {param.numel():_}")
-    print(
-        f"{sum(p.numel() for p in net.parameters() if p.requires_grad):_} total parameters"
-    )
+    log_hparams(net, optimizer, device, num_epochs, run)
 
     for epoch in range(num_epochs):
         net.train()
@@ -70,6 +107,7 @@ def train() -> None:
             logits = net(byte_ids.to(device))
             loss = F.cross_entropy(logits, labels.to(device))
             loss.backward()
+            run.track(loss.item(), name="loss", epoch=epoch, step=b_idx)
             optimizer.step()
             total_loss += loss.item()
             if (b_idx + 1) % (num_steps // num_evals_per_epoch) == 0:
@@ -78,11 +116,14 @@ def train() -> None:
                 net.eval()
                 predictions, labels = predict(net, eval_loader, device)
                 net.train()
-                print(f"Accuracy: {100.* accuracy(predictions, labels):.4f}%")
+                accuracy_score = accuracy(predictions, labels)
+                run.track(accuracy_score, name="accuracy", epoch=epoch, step=b_idx)
+                print(f"Accuracy: {100.* accuracy_score:.4f}%")
                 macro_f1 = sum(
                     f1_score(predictions, labels, class_id=lang_id)
                     for lang_id in range(len(IDX2LANG))
                 ) / len(IDX2LANG)
+                run.track(macro_f1, name="macro_f1", epoch=epoch, step=b_idx)
                 print(f"Macro F1 Score: {macro_f1:.4f}")
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch+1}, Loss: {avg_loss:.4f}")

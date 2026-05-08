@@ -113,17 +113,27 @@ class ByteHybrid(nn.Module):
     def __init__(
         self,
         num_classes: int,
-        d_model: int = 256,
-        n_conv: int = 3,
-        n_attn: int = 1,
-        n_heads: int = 4,
-        ffn_expand: int = 2,
-        max_len: int = 512,
-        conv_kernel: int = 15,
-        ngram_buckets: int = 0,
-        ngram_dim: int = 64,
+        d_model: int,
+        n_conv: int,
+        n_attn: int,
+        n_heads: int,
+        ffn_expand: int,
+        max_len: int,
+        conv_kernel: int,
+        ngram_buckets: int,
+        ngram_dim: int,
     ):
         super().__init__()
+        self.num_classes = num_classes
+        self.d_model = d_model
+        self.n_conv = n_conv
+        self.n_attn = n_attn
+        self.n_heads = n_heads
+        self.ffn_expand = ffn_expand
+        self.max_len = max_len
+        self.conv_kernel = conv_kernel
+        self.ngram_buckets = ngram_buckets
+        self.ngram_dim = ngram_dim
         self.max_len = max_len
 
         # Byte values 0–255 plus index 256 = padding token
