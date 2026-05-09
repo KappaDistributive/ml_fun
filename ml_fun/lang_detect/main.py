@@ -96,13 +96,14 @@ def train() -> None:
     eval_loader = DataLoader(LangIdData(load_data_cached("validation")), batch_size=128)
 
     log_hparams(net, optimizer, device, num_epochs, run)
-
+    global_step = 1
     for epoch in range(num_epochs):
         net.train()
         total_loss = 0.0
         p_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}")
         num_steps = len(train_loader)
         for b_idx, (byte_ids, labels) in enumerate(p_bar):
+            global_step += 1
             optimizer.zero_grad()
             logits = net(byte_ids.to(device))
             loss = F.cross_entropy(logits, labels.to(device))
@@ -117,13 +118,15 @@ def train() -> None:
                 predictions, labels = predict(net, eval_loader, device)
                 net.train()
                 accuracy_score = accuracy(predictions, labels)
-                run.track(accuracy_score, name="accuracy", epoch=epoch, step=b_idx)
+                run.track(
+                    accuracy_score, name="accuracy", epoch=epoch, step=global_step
+                )
                 print(f"Accuracy: {100.* accuracy_score:.4f}%")
                 macro_f1 = sum(
                     f1_score(predictions, labels, class_id=lang_id)
                     for lang_id in range(len(IDX2LANG))
                 ) / len(IDX2LANG)
-                run.track(macro_f1, name="macro_f1", epoch=epoch, step=b_idx)
+                run.track(macro_f1, name="macro_f1", epoch=epoch, step=global_step)
                 print(f"Macro F1 Score: {macro_f1:.4f}")
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch+1}, Loss: {avg_loss:.4f}")
