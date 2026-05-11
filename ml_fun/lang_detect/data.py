@@ -50,7 +50,9 @@ def load_data_cached(split: str) -> pl.DataFrame:
     if not local_path.exists():
         local_path.parent.mkdir(parents=True, exist_ok=True)
         print(f"Downloading {split} split from Hugging Face...")
-        df = pl.read_parquet(str(local_path.absolute()))
+        df = pl.read_parquet(
+            "hf://datasets/PleIAs/CommonLingua-Train/" + DATA_SPLITS[split]
+        )
         df.write_parquet(local_path)
         print(f"Saved {split} split to cache at {local_path}")
     else:
