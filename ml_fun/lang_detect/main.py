@@ -1,17 +1,30 @@
+import os
 import time
 
 import aim
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
 from ml_fun.lang_detect.data import DATA_DIR, IDX2LANG, LangIdData, load_data_cached
 from ml_fun.lang_detect.metrics import accuracy, f1_score
 from ml_fun.lang_detect.model import ByteHybrid
+
+
+def setup() -> None:
+    backend = "nccl" if torch.cuda.is_available() else "gloo"
+    dist.init_process_group(backend=backend)
+
+
+def cleanup() -> None:
+    dist.destroy_process_group()
 
 
 def predict(
@@ -67,18 +80,26 @@ def log_hparams(
 
 
 def train() -> None:
+    setup()
+
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    device = torch.device("cpu")
+    if torch.cuda.is_available():
+        device = torch.device(f"cuda:{local_rank}")
+        torch.cuda.set_device(device)
+    # elif torch.backends.mps.is_available():
+    #     device = torch.device("mps")
+
+    print(f"Rank {rank}/{world_size} running on {device}")
+
     run = aim.Run(experiment="lang_detect")
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     print(f"Starting training at {timestamp}")
     num_epochs = 10
     num_evals_per_epoch = 10
-    device = torch.device("cpu")
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")
     print(f"Using device: {device}")
-    df = load_data_cached("train")
     net = ByteHybrid(
         num_classes=len(IDX2LANG),
         d_model=256,
@@ -91,13 +112,22 @@ def train() -> None:
         ngram_dim=64,
         max_len=512,
     ).to(device)
-    optimizer = optim.Adam(net.parameters(), lr=1e-3)
-    train_loader = DataLoader(LangIdData(df), batch_size=128, shuffle=True)
-    eval_loader = DataLoader(LangIdData(load_data_cached("validation")), batch_size=128)
+    ddp_net = DDP(net, device_ids=[device.index] if device.type == "cuda" else None)
+    optimizer = optim.Adam(ddp_net.parameters(), lr=1e-3)
+    train_data = LangIdData(load_data_cached("train"))
+    train_sampler = DistributedSampler(
+        train_data, num_replicas=world_size, shuffle=True, rank=rank
+    )
+    train_loader = DataLoader(train_data, batch_size=128, sampler=train_sampler)
+
+    eval_data = LangIdData(load_data_cached("validation"))
+    eval_sampler = DistributedSampler(eval_data, num_replicas=world_size, rank=rank)
+    eval_loader = DataLoader(eval_data, batch_size=128, sampler=eval_sampler)
 
     log_hparams(net, optimizer, device, num_epochs, run)
     global_step = 1
     for epoch in range(num_epochs):
+        train_sampler.set_epoch(epoch)
         net.train()
         total_loss = 0.0
         p_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}")
@@ -151,6 +181,7 @@ def train() -> None:
             },
             DATA_DIR / "checkpoints" / f"byte_hybrid_epoch_{timestamp}_{epoch+1}.pt",
         )
+    cleanup()
 
 
 if __name__ == "__main__":
