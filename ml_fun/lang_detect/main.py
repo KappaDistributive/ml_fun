@@ -3,12 +3,14 @@ import os
 import time
 
 import aim
+import hydra
 import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from omegaconf import DictConfig
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -89,43 +91,16 @@ def compute_and_log_metrics(
 
 def log_hparams(
     net: nn.Module,
-    optimizer: optim.Optimizer,
-    device: torch.device,
-    num_epochs: int,
+    cfg: DictConfig,
     run: aim.Run,
 ) -> None:
     logger.info(net)
     num_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
-    run["hparams"] = {
-        "net": {
-            "class": net.__class__.__name__,
-            "num_classes": net.num_classes,
-            "d_model": net.d_model,
-            "n_conv": net.n_conv,
-            "n_attn": net.n_attn,
-            "n_heads": net.n_heads,
-            "ffn_expand": net.ffn_expand,
-            "conv_kernel": net.conv_kernel,
-            "ngram_buckets": net.ngram_buckets,
-            "ngram_dim": net.ngram_dim,
-            "max_len": net.max_len,
-            "num_epochs": num_epochs,
-            "learning_rate": optimizer.param_groups[0]["lr"],
-            "num_params": num_params,
-        },
-        "optimizer": {
-            "class": optimizer.__class__.__name__,
-            "learning_rate": optimizer.param_groups[0]["lr"],
-        },
-        "misc": {
-            "device": str(device),
-            "epochs": num_epochs,
-        },
-    }
+    run["hparams"] = cfg
     logger.info(f"Total parameters: {num_params:_}")
 
 
-def train(timestamp: str) -> None:
+def train(cfg: DictConfig, timestamp: str) -> None:
     rank = dist.get_rank()
     world_size = dist.get_world_size()
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -138,36 +113,40 @@ def train(timestamp: str) -> None:
 
     logger.info(f"Rank {rank}/{world_size} running on {device}")
 
-    run = aim.Run(experiment="lang_detect")
+    run = aim.Run(experiment=cfg.experiment.name)
     logger.info(f"Starting training at {timestamp}")
-    num_epochs = 10
-    num_evals_per_epoch = 10
+    num_epochs = cfg.training.num_epochs
+    num_evals_per_epoch = cfg.training.num_evals_per_epoch
     logger.info(f"Using device: {device}")
     net = ByteHybrid(
         num_classes=len(IDX2LANG),
-        d_model=256,
-        n_conv=3,
-        n_attn=1,
-        n_heads=4,
-        ffn_expand=2,
-        conv_kernel=15,
-        ngram_buckets=4096,
-        ngram_dim=64,
-        max_len=512,
+        d_model=cfg.net.d_model,
+        n_conv=cfg.net.n_conv,
+        n_attn=cfg.net.n_attn,
+        n_heads=cfg.net.n_heads,
+        ffn_expand=cfg.net.ffn_expand,
+        conv_kernel=cfg.net.conv_kernel,
+        ngram_buckets=cfg.net.ngram_buckets,
+        ngram_dim=cfg.net.ngram_dim,
+        max_len=cfg.net.max_len,
     ).to(device)
     ddp_net = DDP(net, device_ids=[device.index] if device.type == "cuda" else None)
-    optimizer = optim.Adam(ddp_net.parameters(), lr=1e-3)
+    optimizer = optim.Adam(ddp_net.parameters(), lr=cfg.optimizer.lr)
     train_data = LangIdData(load_data_cached("train"))
     train_sampler = DistributedSampler(
         train_data, num_replicas=world_size, shuffle=True, rank=rank
     )
-    train_loader = DataLoader(train_data, batch_size=128, sampler=train_sampler)
+    train_loader = DataLoader(
+        train_data, batch_size=cfg.training.batch_size_train, sampler=train_sampler
+    )
 
     eval_data = LangIdData(load_data_cached("validation"))
     eval_sampler = DistributedSampler(eval_data, num_replicas=world_size, rank=rank)
-    eval_loader = DataLoader(eval_data, batch_size=128, sampler=eval_sampler)
+    eval_loader = DataLoader(
+        eval_data, batch_size=cfg.training.batch_size_eval, sampler=eval_sampler
+    )
 
-    log_hparams(net, optimizer, device, num_epochs, run)
+    log_hparams(net, cfg, run)
     global_step = 1
     for epoch in range(num_epochs):
         train_sampler.set_epoch(epoch)
@@ -232,11 +211,18 @@ def train(timestamp: str) -> None:
     cleanup()
 
 
-if __name__ == "__main__":
+@hydra.main(version_base="1.3", config_path="configs", config_name="byte_hybrid")
+def main(cfg: DictConfig) -> None:
+    logger.info("Initializing distributed training...")
+    logger.info(f"Configuration: {cfg}")
     setup()
     rank = dist.get_rank()
     timestamp_holder = [time.strftime("%Y%m%d-%H%M%S") if rank == 0 else ""]
     dist.broadcast_object_list(timestamp_holder, src=0)
     timestamp = timestamp_holder[0]
     setup_logging(timestamp, rank)
-    train(timestamp)
+    train(cfg, timestamp)
+
+
+if __name__ == "__main__":
+    main()

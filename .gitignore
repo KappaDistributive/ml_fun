@@ -8,6 +8,7 @@ __pycache__/
 ml_fun/**/*/data/
 kaggle/*/data
 ml_fun/tutorials/*/data
+ml_fun/lang_detect/outputs
 
 # C extensions
 *.so

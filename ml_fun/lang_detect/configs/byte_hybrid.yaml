@@ -1,0 +1,25 @@
+net:
+  name: ByteHybrid
+  d_model: 256
+  n_conv: 3
+  n_attn: 1
+  n_heads: 4
+  ffn_expand: 2
+  conv_kernel: 15
+  ngram_buckets: 4096
+  ngram_dim: 64
+  max_len: 512
+
+optimizer:
+  name: Adam
+  lr: 1e-3
+
+training:
+  num_epochs: 10
+  num_evals_per_epoch: 10
+  batch_size_train: 128
+  batch_size_eval: 128
+ 
+experiment:
+  name: lang_detect
+
