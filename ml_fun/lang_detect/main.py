@@ -184,12 +184,14 @@ def train(timestamp: str) -> None:
             optimizer.step()
             reduced_loss = loss.detach().clone()
             dist.reduce(reduced_loss, dst=0, op=dist.ReduceOp.SUM)
+            batch_loss = None
             if rank == 0:
                 batch_loss = reduced_loss.item() / world_size
                 run.track(batch_loss, name="loss", epoch=epoch, step=b_idx)
                 total_loss += batch_loss
             if (b_idx + 1) % (num_steps // num_evals_per_epoch) == 0:
                 if rank == 0:
+                    assert batch_loss is not None
                     logger.info(f"Batch {b_idx+1} Loss: {batch_loss:.4f}")
                 logger.info("Starting evaluation...")
                 net.eval()
@@ -203,6 +205,7 @@ def train(timestamp: str) -> None:
                     compute_and_log_metrics(
                         predictions, labels, run, epoch, global_step
                     )
+        # end of current epoch
         if rank == 0:
             avg_loss = total_loss / len(train_loader)
             logger.info(f"Epoch {epoch+1}, Loss: {avg_loss:.4f}")
@@ -225,6 +228,7 @@ def train(timestamp: str) -> None:
             },
             DATA_DIR / "checkpoints" / f"byte_hybrid_epoch_{timestamp}_{epoch+1}.pt",
         )
+    # end of all epochs
     cleanup()
 
 
