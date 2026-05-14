@@ -13,7 +13,6 @@ import torch.optim as optim
 from omegaconf import DictConfig
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
 from ml_fun.lang_detect.data import DATA_DIR, IDX2LANG, setup_data_loaders
