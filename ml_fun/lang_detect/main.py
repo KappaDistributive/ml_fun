@@ -45,6 +45,48 @@ def predict(
     return np.asarray(predictions), np.asarray(labels)
 
 
+def distributed_predict(
+    net: nn.Module,
+    data_loader: DataLoader,
+    device: torch.device,
+    rank: int,
+    world_size: int,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Predict on this rank's shard and gather all results onto rank 0.
+
+    Returns concatenated (predictions, labels) on rank 0; ``None`` on others.
+    """
+    local_preds, local_labels = predict(net, data_loader, device)
+    gather_list: list[tuple[np.ndarray, np.ndarray]] | None = (
+        [None] * world_size if rank == 0 else None  # type: ignore[list-item]
+    )
+    dist.gather_object((local_preds, local_labels), gather_list, dst=0)
+    if rank != 0:
+        return None
+    assert gather_list is not None
+    all_preds = np.concatenate([p for p, _ in gather_list])
+    all_labels = np.concatenate([lbl for _, lbl in gather_list])
+    return all_preds, all_labels
+
+
+def compute_and_log_metrics(
+    predictions: np.ndarray,
+    labels: np.ndarray,
+    run: aim.Run,
+    epoch: int,
+    step: int,
+) -> None:
+    accuracy_score = accuracy(predictions, labels)
+    run.track(accuracy_score, name="accuracy", epoch=epoch, step=step)
+    logger.info(f"Accuracy: {100.0 * accuracy_score:.4f}%")
+    macro_f1 = sum(
+        f1_score(predictions, labels, class_id=lang_id)
+        for lang_id in range(len(IDX2LANG))
+    ) / len(IDX2LANG)
+    run.track(macro_f1, name="macro_f1", epoch=epoch, step=step)
+    logger.info(f"Macro F1 Score: {macro_f1:.4f}")
+
+
 def log_hparams(
     net: nn.Module,
     optimizer: optim.Optimizer,
@@ -139,38 +181,39 @@ def train(timestamp: str) -> None:
             logits = net(byte_ids.to(device))
             loss = F.cross_entropy(logits, labels.to(device))
             loss.backward()
-            run.track(loss.item(), name="loss", epoch=epoch, step=b_idx)
             optimizer.step()
-            total_loss += loss.item()
+            reduced_loss = loss.detach().clone()
+            dist.reduce(reduced_loss, dst=0, op=dist.ReduceOp.SUM)
+            if rank == 0:
+                batch_loss = reduced_loss.item() / world_size
+                run.track(batch_loss, name="loss", epoch=epoch, step=b_idx)
+                total_loss += batch_loss
             if (b_idx + 1) % (num_steps // num_evals_per_epoch) == 0:
-                logger.info(f"Batch {b_idx+1} Loss: {loss.item():.4f}")
+                if rank == 0:
+                    logger.info(f"Batch {b_idx+1} Loss: {batch_loss:.4f}")
                 logger.info("Starting evaluation...")
                 net.eval()
-                predictions, labels = predict(net, eval_loader, device)
-                net.train()
-                accuracy_score = accuracy(predictions, labels)
-                run.track(
-                    accuracy_score, name="accuracy", epoch=epoch, step=global_step
+                gathered = distributed_predict(
+                    net, eval_loader, device, rank, world_size
                 )
-                logger.info(f"Accuracy: {100.* accuracy_score:.4f}%")
-                macro_f1 = sum(
-                    f1_score(predictions, labels, class_id=lang_id)
-                    for lang_id in range(len(IDX2LANG))
-                ) / len(IDX2LANG)
-                run.track(macro_f1, name="macro_f1", epoch=epoch, step=global_step)
-                logger.info(f"Macro F1 Score: {macro_f1:.4f}")
-        avg_loss = total_loss / len(train_loader)
-        logger.info(f"Epoch {epoch+1}, Loss: {avg_loss:.4f}")
+                net.train()
+                if rank == 0:
+                    assert gathered is not None
+                    predictions, labels = gathered
+                    compute_and_log_metrics(
+                        predictions, labels, run, epoch, global_step
+                    )
+        if rank == 0:
+            avg_loss = total_loss / len(train_loader)
+            logger.info(f"Epoch {epoch+1}, Loss: {avg_loss:.4f}")
         logger.info("Starting evaluation...")
         net.eval()
-        predictions, labels = predict(net, eval_loader, device)
+        gathered = distributed_predict(net, eval_loader, device, rank, world_size)
         net.train()
-        logger.info(f"Accuracy: {100.* accuracy(predictions, labels):.4f}%")
-        macro_f1 = sum(
-            f1_score(predictions, labels, class_id=lang_id)
-            for lang_id in range(len(IDX2LANG))
-        ) / len(IDX2LANG)
-        logger.info(f"Macro F1 Score: {macro_f1:.4f}")
+        if rank == 0:
+            assert gathered is not None
+            predictions, labels = gathered
+            compute_and_log_metrics(predictions, labels, run, epoch, global_step)
 
         logger.info(f"Saving checkpoint for epoch {epoch+1}...")
         (DATA_DIR / "checkpoints").mkdir(parents=True, exist_ok=True)
