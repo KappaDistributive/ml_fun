@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
-from ml_fun.lang_detect.data import DATA_DIR, IDX2LANG, LangIdData, load_data_cached
+from ml_fun.lang_detect.data import DATA_DIR, IDX2LANG, setup_data_loaders
 from ml_fun.lang_detect.logger import setup_logging
 from ml_fun.lang_detect.metrics import accuracy, f1_score
 from ml_fun.lang_detect.model import ByteHybrid
@@ -132,24 +132,15 @@ def train(cfg: DictConfig, timestamp: str) -> None:
     ).to(device)
     ddp_net = DDP(net, device_ids=[device.index] if device.type == "cuda" else None)
     optimizer = optim.Adam(ddp_net.parameters(), lr=cfg.optimizer.lr)
-    train_data = LangIdData(load_data_cached("train"))
-    train_sampler = DistributedSampler(
-        train_data, num_replicas=world_size, shuffle=True, rank=rank
-    )
-    train_loader = DataLoader(
-        train_data, batch_size=cfg.training.batch_size_train, sampler=train_sampler
-    )
-
-    eval_data = LangIdData(load_data_cached("validation"))
-    eval_sampler = DistributedSampler(eval_data, num_replicas=world_size, rank=rank)
-    eval_loader = DataLoader(
-        eval_data, batch_size=cfg.training.batch_size_eval, sampler=eval_sampler
+    train_sampler, train_loader, eval_sampler, eval_loader = setup_data_loaders(
+        cfg, rank, world_size
     )
 
     log_hparams(net, cfg, run)
     global_step = 1
     for epoch in range(num_epochs):
         train_sampler.set_epoch(epoch)
+        eval_sampler.set_epoch(epoch)
         net.train()
         total_loss = 0.0
         p_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}")

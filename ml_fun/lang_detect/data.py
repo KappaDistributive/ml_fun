@@ -4,7 +4,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import torch
-from torch.utils.data import Dataset
+from omegaconf import DictConfig
+from torch.utils.data import DataLoader, Dataset, DistributedSampler
 
 logger = logging.getLogger(__name__)
 
@@ -94,3 +95,23 @@ class LangIdData(Dataset):
         byte_ids = embed([text])[0]  # shape: (max_len,)
         label_idx = LANG2IDX[label]
         return byte_ids, label_idx
+
+
+def setup_data_loaders(
+    cfg: DictConfig, rank: int, world_size: int
+) -> tuple[DistributedSampler, DataLoader, DistributedSampler, DataLoader]:
+    train_data = LangIdData(load_data_cached("train"))
+    train_sampler = DistributedSampler(
+        train_data, num_replicas=world_size, shuffle=True, rank=rank
+    )
+    train_loader = DataLoader(
+        train_data, batch_size=cfg.training.batch_size_train, sampler=train_sampler
+    )
+
+    eval_data = LangIdData(load_data_cached("validation"))
+    eval_sampler = DistributedSampler(eval_data, num_replicas=world_size, rank=rank)
+    eval_loader = DataLoader(
+        eval_data, batch_size=cfg.training.batch_size_eval, sampler=eval_sampler
+    )
+
+    return train_sampler, train_loader, eval_sampler, eval_loader
