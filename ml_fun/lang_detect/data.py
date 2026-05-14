@@ -1,9 +1,12 @@
+import logging
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 import torch
 from torch.utils.data import Dataset
+
+logger = logging.getLogger(__name__)
 
 DATA_DIR: Path = Path(__file__).parent / "data"
 DATA_BASE_URL: str = "hf://datasets/PleIAs/CommonLingua-Train/"
@@ -27,8 +30,8 @@ def embed(
     out = np.full((len(texts), max_len), fill_value=256, dtype=np.int64)
     for text_idx, text in enumerate(texts):
         if verbose and len(text) > max_len:
-            print(
-                f"Warning: Text {text[:10]} exceeds max length of {max_len} bytes and will be truncated."
+            logger.warning(
+                f"Text {text[:10]} exceeds max length of {max_len} bytes and will be truncated."
             )
         raw = text.encode("utf-8", errors="replace")[:max_len]
         out[text_idx, : len(raw)] = list(raw)
@@ -49,14 +52,14 @@ def load_data_cached(split: str) -> pl.DataFrame:
     local_path = DATA_DIR / "commonlingua" / DATA_SPLITS[split]
     if not local_path.exists():
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        print(f"Downloading {split} split from Hugging Face...")
+        logger.info(f"Downloading {split} split from Hugging Face...")
         df = pl.read_parquet(
             "hf://datasets/PleIAs/CommonLingua-Train/" + DATA_SPLITS[split]
         )
         df.write_parquet(local_path)
-        print(f"Saved {split} split to cache at {local_path}")
+        logger.info(f"Saved {split} split to cache at {local_path}")
     else:
-        print(f"Loading {split} split from cache...")
+        logger.info(f"Loading {split} split from cache...")
         df = pl.read_parquet(local_path)
 
     return df
