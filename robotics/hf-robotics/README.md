@@ -9,7 +9,7 @@ Done
 
 - Birth of both robotics and AI in the 1950s
 - [Unimate](https://en.wikipedia.org/wiki/Unimate) as the first industrial robot (1961)
-- [ ] Watch later: [Paradigm Shifts - Robot Learning](https://www.youtube.com/watch?v=VEs1QYEgOQo)
+- [x] Watch later: [Paradigm Shifts - Robot Learning](https://www.youtube.com/watch?v=VEs1QYEgOQo)
 - LeRobot is an open-source library for robotics and AI research, providing tools for simulation, control, and learning algorithms.
 - [official docs here](https://huggingface.co/docs/lerobot/index)
 - Specialized data format: `LeRobotDataset`
@@ -32,4 +32,8 @@ Done
 
 
 ## 2. Classical Robotics
-
+- [x] Introduction to Classical Robotics
+- [x] Types of Robot Motion
+- [x] Robot Kinematics
+- [x] Control Systems and Their Limitations
+- [x] From Classical to Learning-Based Robotics
